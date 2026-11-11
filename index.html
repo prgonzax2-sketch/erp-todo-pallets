@@ -11288,7 +11288,82 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
     return out;
   }
 
+  function ensureActivationOverlay() {
+    var el = document.getElementById('licensing-activation-overlay');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'licensing-activation-overlay';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-labelledby', 'lic-activation-title');
+    el.style.cssText = 'display:none;position:fixed;inset:0;z-index:11000;background:var(--ap-bg,#12181b);color:var(--ap-ink,#e8ece6);overflow:auto;padding:24px 16px;font-family:Manrope,system-ui,sans-serif;';
+    el.innerHTML = ''
+      + '<div id="lic-activation-card" style="max-width:560px;margin:4vh auto;background:var(--ap-surface,#1e262a);border:1px solid var(--ap-border,rgba(255,255,255,.08));border-radius:14px;padding:22px 20px;box-shadow:0 12px 40px rgba(0,0,0,.45);">'
+      + '  <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'
+      + '    <span aria-hidden="true" style="display:inline-flex;width:36px;height:36px;border-radius:10px;align-items:center;justify-content:center;background:rgba(248,113,113,.14);color:#f87171;font-weight:800;">!</span>'
+      + '    <h1 id="lic-activation-title" style="margin:0;font-size:20px;line-height:1.2;color:var(--ap-ink,#e8ece6);">Activación Requerida</h1>'
+      + '  </div>'
+      + '  <p id="lic-activation-msg" style="margin:0 0 12px;color:var(--ap-muted,#9aa6a0);font-size:14px;line-height:1.5;">El sistema requiere una licencia válida para continuar. Acceso restringido según política de licenciamiento.</p>'
+      + '  <div id="lic-activation-details" style="font-size:13px;line-height:1.55;color:var(--ap-ink,#e8ece6);background:rgba(255,255,255,.03);border:1px solid var(--ap-border,rgba(255,255,255,.08));border-radius:10px;padding:12px 12px;margin:0 0 14px;"></div>'
+      + '  <div style="font-size:13px;color:var(--ap-muted,#9aa6a0);line-height:1.5;">'
+      + '    <strong style="color:var(--ap-ink,#e8ece6);">Pasos:</strong>'
+      + '    <ol style="margin:6px 0 0 18px;padding:0;">'
+      + '      <li>Verifique conectividad con el servidor de licencias y la configuración del sistema.</li>'
+      + '      <li>Contacte a soporte/administración para activar o regularizar la licencia de esta instalación.</li>'
+      + '      <li>Una vez activada, recargue esta página o inicie sesión para continuar.</li>'
+      + '    </ol>'
+      + '  </div>'
+      + '</div>';
+    document.body.appendChild(el);
+    return el;
+  }
+
+  function setSpaHidden(hidden) {
+    var ids = ['login-section', 'dashboard-section'];
+    ids.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      if (hidden) {
+        if (!el.hasAttribute('data-lic-prev-display')) el.setAttribute('data-lic-prev-display', el.style.display || '');
+        el.style.setProperty('display', 'none', 'important');
+        el.setAttribute('aria-hidden', 'true');
+      } else {
+        if (el.hasAttribute('data-lic-prev-display')) {
+          var prev = el.getAttribute('data-lic-prev-display');
+          el.style.display = prev;
+          el.removeAttribute('data-lic-prev-display');
+          el.removeAttribute('aria-hidden');
+        }
+      }
+    });
+  }
+
+  function renderActivationOverlay(status) {
+    var overlay = ensureActivationOverlay();
+    var blocked = !!(status && status.blocked);
+    if (!blocked) {
+      overlay.style.display = 'none';
+      setSpaHidden(false);
+      return;
+    }
+    setSpaHidden(true);
+    var st = String((status && status.licenseStatus) || 'BLOQUEADA').toUpperCase();
+    var details = [];
+    if (status && status.blockReason) details.push('<div><strong>Motivo:</strong> ' + esc(String(status.blockReason)) + '</div>');
+    details.push('<div><strong>Estado:</strong> ' + esc(st) + '</div>');
+    if (status && status.planCode) details.push('<div><strong>Plan:</strong> ' + esc(String(status.planCode)) + '</div>');
+    if (status && status.validUntil) details.push('<div><strong>Vencimiento:</strong> ' + esc(fmtDate(status.validUntil)) + '</div>');
+    if (status && status.graceDeadlineAt) details.push('<div><strong>Gracia hasta:</strong> ' + esc(fmtDate(status.graceDeadlineAt)) + '</div>');
+    if (status && status.lastCheckAt) details.push('<div><strong>Última verificación:</strong> ' + esc(fmtDate(status.lastCheckAt)) + '</div>');
+    if (status && status.clockTamperSuspected) details.push('<div><strong>Reloj:</strong> posible alteración detectada. Corrija fecha/hora del sistema.</div>');
+    if (status && status.lastError) details.push('<div><strong>Detalle técnico:</strong> ' + esc(String(status.lastError)) + '</div>');
+    var detailsEl = overlay.querySelector('#lic-activation-details');
+    if (detailsEl) detailsEl.innerHTML = details.join('');
+    overlay.style.display = 'block';
+  }
+
   function render(status) {
+    renderActivationOverlay(status);
     var banners = deriveBanners(status);
     var key = JSON.stringify(banners.map(function (b) { return [b.sev, b.title, b.meta]; }));
     if (key === state.lastKey) return;

@@ -1,0 +1,71 @@
+# Compose de producción (F3.2) - Sistema Aserradero
+# Usa imagen versionada desde GHCR (no build local). DB aislada del host (sin ports publicados).
+# Ejecutar desde ./deploy con: docker compose -f docker-compose.prod.yml --env-file .env up -d
+
+services:
+  app:
+    image: ${APP_IMAGE:-ghcr.io/OWNER/erp-todo-pallets}:${APP_IMAGE_TAG:-latest}
+    container_name: sistema_aserradero_app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      PORT: 3000
+      BACKUP_DIRECTORY: /backups
+      TZ: ${TZ:-America/Argentina/Buenos_Aires}
+      TYPEORM_SYNCHRONIZE: "false"
+      # Licenciamiento / updates (estado espejo en volumen /app/license)
+      APP_VERSION: ${APP_VERSION:-0.0.1}
+      LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}
+      LICENSE_PUBLIC_KEY_PEM: ${LICENSE_PUBLIC_KEY_PEM:-}
+      LICENSE_ENFORCEMENT: ${LICENSE_ENFORCEMENT:-grace}
+      LICENSE_CHECK_INTERVAL_MS: ${LICENSE_CHECK_INTERVAL_MS:-86400000}
+      LICENSE_GRACE_HOURS: ${LICENSE_GRACE_HOURS:-72}
+      LICENSE_STATE_PATH: /app/license
+      LICENSE_CLOCK_SKEW_SEC: ${LICENSE_CLOCK_SKEW_SEC:-300}
+      UPDATE_CHANNEL: ${UPDATE_CHANNEL:-stable}
+      UPDATES_AUTO_ENABLED: ${UPDATES_AUTO_ENABLED:-false}
+      # Bootstrap admin one-shot (F3.3)
+      INSTALL_ADMIN_EMAIL: ${INSTALL_ADMIN_EMAIL:-}
+      INSTALL_ADMIN_PASSWORD: ${INSTALL_ADMIN_PASSWORD:-}
+      INSTALL_ADMIN_GENERATE_PASSWORD: ${INSTALL_ADMIN_GENERATE_PASSWORD:-false}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    volumes:
+      - ./backups:/backups
+      - ./license:/app/license
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+
+  db:
+    image: postgres:15
+    container_name: sistema_aserradero_db
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    # Sin ports: DB aislada del host, accesible solo en red interna
+    volumes:
+      - ./dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
