@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 
-REM nightly-update.bat — Agente de actualización nocturna (Pilar 3b, F4.2–F4.6, D6/D10)
+REM nightly-update.bat â€” Agente de actualizaciÃ³n nocturna (Pilar 3b, F4.2â€“F4.6, D6/D10)
 REM Requisitos: Docker Desktop/Engine con Compose v2, Node.js, curl, tar, PowerShell.
 REM Uso:
 REM   scripts\nightly-update.bat [--now^|--no-wait] [--dry-run] [--deploy-dir <dir>] [--compose-file <file>] [--log-file <file>]
@@ -42,18 +42,36 @@ exit /b 0
 :args_done
 if defined DEPLOY_DIR_ARG (
   set "DEPLOY_DIR=%DEPLOY_DIR_ARG%"
-) else if defined DEPLOY_DIR (
-  rem keep env DEPLOY_DIR
-) else if exist "%CD%\docker-compose.prod.yml" if exist "%CD%\.env" (
-  set "DEPLOY_DIR=%CD%"
-) else if exist "%REPO_ROOT%\deploy\docker-compose.prod.yml" (
-  set "DEPLOY_DIR=%REPO_ROOT%\deploy"
 ) else (
-  set "DEPLOY_DIR=%CD%"
+  if defined DEPLOY_DIR (
+    rem keep env DEPLOY_DIR
+  ) else (
+    if exist "%CD%\docker-compose.prod.yml" (
+      if exist "%CD%\.env" (
+        set "DEPLOY_DIR=%CD%"
+      ) else (
+        if exist "%REPO_ROOT%\deploy\docker-compose.prod.yml" (
+          set "DEPLOY_DIR=%REPO_ROOT%\deploy"
+        ) else (
+          set "DEPLOY_DIR=%CD%"
+        )
+      )
+    ) else (
+      if exist "%REPO_ROOT%\deploy\docker-compose.prod.yml" (
+        set "DEPLOY_DIR=%REPO_ROOT%\deploy"
+      ) else (
+        set "DEPLOY_DIR=%CD%"
+      )
+    )
+  )
 )
 for %%I in ("%DEPLOY_DIR%") do set "DEPLOY_DIR=%%~fI"
 
-if defined COMPOSE_FILE_ARG (set "COMPOSE_FILE=%COMPOSE_FILE_ARG%") else if defined COMPOSE_FILE (rem keep) else set "COMPOSE_FILE=%DEPLOY_DIR%\docker-compose.prod.yml"
+if defined COMPOSE_FILE_ARG (
+  set "COMPOSE_FILE=%COMPOSE_FILE_ARG%"
+) else (
+  if not defined COMPOSE_FILE set "COMPOSE_FILE=%DEPLOY_DIR%\docker-compose.prod.yml"
+)
 for %%I in ("%COMPOSE_FILE%") do set "COMPOSE_FILE=%%~fI"
 
 set "ENV_FILE=%DEPLOY_DIR%\.env"
@@ -61,7 +79,11 @@ set "BACKUPS_DIR=%DEPLOY_DIR%\backups"
 set "LICENSE_DIR=%DEPLOY_DIR%\license"
 if not exist "%BACKUPS_DIR%" mkdir "%BACKUPS_DIR%" >nul 2>nul
 
-if defined LOG_FILE_ARG (set "LOG_FILE=%LOG_FILE_ARG%") else if defined LOG_FILE (rem keep) else set "LOG_FILE=%BACKUPS_DIR%\update-agent.log"
+if defined LOG_FILE_ARG (
+  set "LOG_FILE=%LOG_FILE_ARG%"
+) else (
+  if not defined LOG_FILE set "LOG_FILE=%BACKUPS_DIR%\update-agent.log"
+)
 for %%I in ("%LOG_FILE%") do set "LOG_FILE=%%~fI"
 
 set "LOCK_FILE=%BACKUPS_DIR%\.nightly-update.lock"
@@ -73,7 +95,7 @@ if not defined UPDATE_HEALTH_RETRIES set "UPDATE_HEALTH_RETRIES=12"
 if not defined UPDATE_HEALTH_DELAY_SEC set "UPDATE_HEALTH_DELAY_SEC=5"
 
 call :log "===== Inicio nightly-update (dry_run=%DRY_RUN% no_wait=%NO_WAIT%) ====="
-call :log "Deploy dir: %DEPLOY_DIR% | Compose: %COMPOSE_FILE%"
+call :log "Deploy dir: %DEPLOY_DIR% - Compose: %COMPOSE_FILE%"
 
 where docker >nul 2>nul || (call :log_err "Docker no encontrado" & exit /b 1)
 where node >nul 2>nul || (call :log_err "Node.js no encontrado" & exit /b 1)
@@ -258,10 +280,12 @@ if errorlevel 1 (
 
 if "%RESTORE_REQUIRED%"=="1" (
   call :log_err "F4.6: RESTORE REQUERIDO - verificar integridad de esquema/datos y consistencia con imagen previa (backup verificado: %PREFIX%)."
-) else if "%MIGRATION_ATTEMPTED%"=="1" (
-  call :log_err "F4.6: RESTORE REQUERIDO - migracion pudo ejecutarse/parcialmente; verificar integridad (backup verificado: %PREFIX%)."
 ) else (
-  call :log "F4.6: rollback app-only completado (sin indicios de cambio de esquema)."
+  if "%MIGRATION_ATTEMPTED%"=="1" (
+    call :log_err "F4.6: RESTORE REQUERIDO - migracion pudo ejecutarse/parcialmente; verificar integridad (backup verificado: %PREFIX%)."
+  ) else (
+    call :log "F4.6: rollback app-only completado (sin indicios de cambio de esquema)."
+  )
 )
 call :release_lock
 if "%FAIL_PHASE%"=="compose-up" exit /b 7
@@ -286,19 +310,9 @@ for /f "usebackq delims=" %%T in (`powershell -NoProfile -Command "Get-Date -For
 exit /b 0
 
 :load_env
-REM Carga .env simple KEY=VALUE al entorno del proceso (sin imprimir secretos)
-for /f "usebackq delims=" %%L in (`powershell -NoProfile -Command "$p=$args[0]; Get-Content -LiteralPath $p | ForEach-Object { $l=$_; if($l -match '^\s*#' -or $l -match '^\s*$'){return}; if($l -match '^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)$'){ $k=$matches[1]; $v=$matches[2]; $v=$v -replace \"`r\",''; Write-Output ('__KV__'+$k+'__EQ__'+$v) } }" "%~1"`) do (
-  set "_LINE=%%L"
-  set "_LINE=!_LINE:__KV__=!"
-  for /f "tokens=1,* delims==" %%K in ("!_LINE:__EQ__==!") do set "%%K=%%LVAL"
-)
-REM fallback robusto: usar PowerShell para setear via archivo temporal de set commands
-set "_ENVSET=%TEMP%\ua_env_%RANDOM%.cmd"
-powershell -NoProfile -Command "$p=$args[0]; $out=@(); Get-Content -LiteralPath $p | ForEach-Object { $l=$_; if($l -match '^\s*#' -or $l -match '^\s*$'){return}; if($l -match '^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)$'){ $k=$matches[1]; $v=$matches[2].TrimEnd(); $v=$v -replace '\^','^^' -replace '&','^&' -replace '\|','^|' -replace '<','^<' -replace '>','^>' -replace '!','^^!'; $out += ('set \"'+$k+'='+$matches[2].TrimEnd()+'\"') } }; [IO.File]::WriteAllLines($args[1]+'.cmdtmp',$out,[Text.UTF8Encoding]::new($false))" "%~1" >nul 2>nul
-if exist "%~1.cmdtmp" (
-  REM apply safely line by line
-  for /f "usebackq delims=" %%E in ("%~1.cmdtmp") do %%E
-  del /q "%~1.cmdtmp" >nul 2>nul
+REM Carga .env KEY=VALUE al entorno del proceso (sin imprimir secretos)
+for /f "usebackq eol=# tokens=1,* delims==" %%A in ("%~1") do (
+  if not "%%A"=="" set "%%A=%%B"
 )
 exit /b 0
 
@@ -324,12 +338,12 @@ if "%NO_WAIT%"=="1" (
   exit /b 0
 )
 for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "$wt=$env:UPDATE_WINDOW_TIME; if($wt -notmatch '^\d{1,2}:\d{2}$'){$wt='03:00'}; $parts=$wt.Split(':'); $h=[int]$parts[0]; $m=[int]$parts[1]; $now=Get-Date; $target=Get-Date -Hour $h -Minute $m -Second 0; if($now -gt $target){$target=$target.AddDays(1)}; [int][Math]::Max(0,($target-$now).TotalSeconds)"`) do set "WAIT_SEC=%%S"
-if %WAIT_SEC% GTR 0 (
+if !WAIT_SEC! GTR 0 (
   call :log "Esperando ventana nocturna %UPDATE_WINDOW_TIME% local (%WAIT_SEC%s)..."
   powershell -NoProfile -Command "Start-Sleep -Seconds %WAIT_SEC%"
 )
 for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "$m=[int]$env:UPDATE_JITTER_MAX_SEC; if($m -lt 0){$m=0}; if($m -eq 0){0}else{Get-Random -Minimum 0 -Maximum ($m+1)}"`) do set "JITTER_SEC=%%S"
-if %JITTER_SEC% GTR 0 (
+if !JITTER_SEC! GTR 0 (
   call :log "Aplicando jitter aleatorio: %JITTER_SEC%s (max %UPDATE_JITTER_MAX_SEC%s)."
   powershell -NoProfile -Command "Start-Sleep -Seconds %JITTER_SEC%"
 )
@@ -340,8 +354,8 @@ set "_PREFIX=%~1"
 call :log "F4.4: iniciando backup verificado (prefijo %_PREFIX%)"
 if not exist "%BACKUPS_DIR%" mkdir "%BACKUPS_DIR%"
 
-if defined POSTGRES_USER (set "_DB_USER=%POSTGRES_USER%") else if defined DB_USERNAME (set "_DB_USER=%DB_USERNAME%") else set "_DB_USER=admin"
-if defined POSTGRES_DB (set "_DB_NAME=%POSTGRES_DB%") else if defined DB_NAME (set "_DB_NAME=%DB_NAME%") else set "_DB_NAME=erp_database"
+if defined POSTGRES_USER (set "_DB_USER=%POSTGRES_USER%") else (if defined DB_USERNAME (set "_DB_USER=%DB_USERNAME%") else (set "_DB_USER=admin"))
+if defined POSTGRES_DB (set "_DB_NAME=%POSTGRES_DB%") else (if defined DB_NAME (set "_DB_NAME=%DB_NAME%") else (set "_DB_NAME=erp_database"))
 set "_DUMP=%BACKUPS_DIR%\%_PREFIX%-db.sql.gz"
 
 call :log "F4.4: ejecutando pg_dump (db=%_DB_NAME%)"
@@ -351,7 +365,15 @@ if errorlevel 1 (
   if exist "%BACKUPS_DIR%\%_PREFIX%-db.sql" del /q "%BACKUPS_DIR%\%_PREFIX%-db.sql" >nul 2>nul
   exit /b 1
 )
-powershell -NoProfile -Command "$in=$args[0]; $out=$args[1]; $i=[IO.File]::OpenRead($in); $o=[IO.File]::Create($out); $g=New-Object IO.Compression.GzipStream($o,[IO.Compression.CompressionMode]::Compress); $i.CopyTo($g); $g.Dispose(); $o.Dispose(); $i.Dispose(); Remove-Item -LiteralPath $in -Force" "%BACKUPS_DIR%\%_PREFIX%-db.sql" "%_DUMP%"
+set "_GZPS=%TEMP%\ua_gz_%RANDOM%.ps1"
+> "%_GZPS%" echo Add-Type -AssemblyName System.IO.Compression
+>> "%_GZPS%" echo $in=$args[0]; $out=$args[1]
+>> "%_GZPS%" echo $i=[IO.File]::OpenRead($in); $o=[IO.File]::Create($out)
+>> "%_GZPS%" echo $g=New-Object IO.Compression.GzipStream($o,[IO.Compression.CompressionMode]::Compress)
+>> "%_GZPS%" echo $i.CopyTo($g); $g.Dispose(); $o.Dispose(); $i.Dispose()
+>> "%_GZPS%" echo Remove-Item -LiteralPath $in -Force
+powershell -NoProfile -ExecutionPolicy Bypass -File "%_GZPS%" "%BACKUPS_DIR%\%_PREFIX%-db.sql" "%_DUMP%" >>"%LOG_FILE%" 2>&1
+del /q "%_GZPS%" >nul 2>nul
 if not exist "%_DUMP%" (call :log_err "F4.4: no se creo dump comprimido" & exit /b 1)
 for %%A in ("%_DUMP%") do if %%~zA LEQ 0 (call :log_err "F4.4: dump vacio" & exit /b 1)
 
@@ -378,14 +400,21 @@ exit /b 1
 
 :restore_db
 set "_PREFIX=%~1"
-if defined POSTGRES_USER (set "_DB_USER=%POSTGRES_USER%") else if defined DB_USERNAME (set "_DB_USER=%DB_USERNAME%") else set "_DB_USER=admin"
-if defined POSTGRES_DB (set "_DB_NAME=%POSTGRES_DB%") else if defined DB_NAME (set "_DB_NAME=%DB_NAME%") else set "_DB_NAME=erp_database"
+if defined POSTGRES_USER (set "_DB_USER=%POSTGRES_USER%") else (if defined DB_USERNAME (set "_DB_USER=%DB_USERNAME%") else (set "_DB_USER=admin"))
+if defined POSTGRES_DB (set "_DB_NAME=%POSTGRES_DB%") else (if defined DB_NAME (set "_DB_NAME=%DB_NAME%") else (set "_DB_NAME=erp_database"))
 set "_DUMP=%BACKUPS_DIR%\%_PREFIX%-db.sql.gz"
 if not exist "%_DUMP%" (call :log_err "Restore DB: dump no encontrado (%_DUMP%)" & exit /b 1)
 call :log "Rollback/restore: restaurando base de datos desde %_PREFIX%-db.sql.gz"
 %COMPOSE_CMD% -f "%COMPOSE_FILE%" --env-file "%ENV_FILE%" exec -T db psql -v ON_ERROR_STOP=1 -U "%_DB_USER%" -d "%_DB_NAME%" -c "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;" >>"%LOG_FILE%" 2>&1
 if errorlevel 1 (call :log_err "Restore DB: fallo al limpiar esquema public" & exit /b 1)
-powershell -NoProfile -Command "$p=$args[0]; $fs=[IO.File]::OpenRead($p); $gz=New-Object IO.Compression.GzipStream($fs,[IO.Compression.CompressionMode]::Decompress); $sr=New-Object IO.StreamReader($gz); while($null -ne ($line=$sr.ReadLine())){[Console]::Out.WriteLine($line)}; $sr.Dispose(); $gz.Dispose(); $fs.Dispose()" "%_DUMP%" | %COMPOSE_CMD% -f "%COMPOSE_FILE%" --env-file "%ENV_FILE%" exec -T db psql -v ON_ERROR_STOP=1 -U "%_DB_USER%" -d "%_DB_NAME%" >>"%LOG_FILE%" 2>&1
+set "_UNGZ=%TEMP%\ua_ungz_%RANDOM%.ps1"
+> "%_UNGZ%" echo Add-Type -AssemblyName System.IO.Compression
+>> "%_UNGZ%" echo $p=$args[0]
+>> "%_UNGZ%" echo $fs=[IO.File]::OpenRead($p); $gz=New-Object IO.Compression.GzipStream($fs,[IO.Compression.CompressionMode]::Decompress); $sr=New-Object IO.StreamReader($gz)
+>> "%_UNGZ%" echo while($null -ne ($line=$sr.ReadLine())){[Console]::Out.WriteLine($line)}
+>> "%_UNGZ%" echo $sr.Dispose(); $gz.Dispose(); $fs.Dispose()
+powershell -NoProfile -ExecutionPolicy Bypass -File "%_UNGZ%" "%_DUMP%" | %COMPOSE_CMD% -f "%COMPOSE_FILE%" --env-file "%ENV_FILE%" exec -T db psql -v ON_ERROR_STOP=1 -U "%_DB_USER%" -d "%_DB_NAME%" >>"%LOG_FILE%" 2>&1
+del /q "%_UNGZ%" >nul 2>nul
 if errorlevel 1 (call :log_err "Restore DB: fallo al importar dump" & exit /b 1)
 call :log "Restore DB: completado desde backup %_PREFIX%"
 exit /b 0
@@ -402,7 +431,7 @@ if not errorlevel 1 (
   exit /b 0
 )
 call :log "Smoke /health pendiente (intento %_ATT%/%UPDATE_HEALTH_RETRIES%)..."
-if %_ATT% GEQ %UPDATE_HEALTH_RETRIES% (
+if !_ATT! GEQ !UPDATE_HEALTH_RETRIES! (
   call :log_err "Smoke /health fallo tras %UPDATE_HEALTH_RETRIES% intentos (%_URL%)"
   exit /b 1
 )
