@@ -1,6 +1,19 @@
 # CHECKPOINT_CONTEXT.md
 
-> Estado operativo resumido. Memoria vigente: `MEMORY.md`. Instrucciones: `AGENTS.md`. Actualizado: **2026-11-12 (SDD licenciamiento F1–F4.8; **preparación F5 completada** + consolidación instalador Windows F3.6: eliminados `deploy/install.sh|.bat` en favor de `setup.exe` Inno + `bootstrap.ps1`, config prod URL+RSA pública pinneada, hardening base, piloto `LICENSE_ENFORCEMENT=grace` y `UPDATES_AUTO_ENABLED=false`, sin auto-update estricto)**. Sistema **estable** (dev `:3000`, `TYPEORM_SYNCHRONIZE=true` en runtime dev; CLI migraciones operativo con `synchronize:false`). **Sin commits en este punto.**
+> Estado operativo resumido. Memoria vigente: `MEMORY.md`. Instrucciones: `AGENTS.md`. Actualizado: **2026-11-12 (licenciamiento cliente: activación por token JWS + `/activacion` + “Mi Suscripción”, rama `feature/agente-licencia-activacion-ui`)**. Sistema **estable** (dev `:3000`, `TYPEORM_SYNCHRONIZE=true` en runtime dev). **Sin push/merge.**
+
+## Sesión 2026-11-12 — Activación de licencia por token (Pilar 1) + UI bloqueo/renovación (ERP)
+
+**Rama:** `feature/agente-licencia-activacion-ui` (local). **Commits (atómicos, sin push/merge):** `ed65a72` `feat(licensing): add public activation endpoints and token activation (ERP Pilar 2)`, `2b8ecfd` `feat(licensing): add /activacion screen, subscription view and license enforcement UI`, `9dde9e7` `test(licensing): add activation token and activation status coverage`.
+
+- **Backend:** `ActivateLicenseTokenDto`; `LicensingService` `verifyAndDecodeSignedToken` (RS256, binding estricto `sub==machine_id_hash` e `instance_id`, `exp` JWS corto aceptado defensivamente en activación si `valid_until`+gracia vigentes), `activateWithToken` (persistencia estado/mirror, recálculo acceso), `getActivationStatusView` (IDs, `daysRemaining`, `validFrom` derivado, errores sanitizados). Endpoints públicos `GET /licensing/activation-status`, `POST /licensing/activate-token`; admin conservados (`/status`,`/check-now`,`/activate`). `LicenseGuard` whitelist `/activacion`; `src/main.ts` sirve `GET /activacion` SPA.
+- **Frontend (`index.html`, UTF-8 sin BOM):** overlay `/activacion` (“Sistema Bloqueado / Pendiente de Activación”) con `machine_id_hash`/`instance_id` copiable, motivo/estado, pegado JWS y “Activar Sistema”; nav+vista “Mi Suscripción” (estado/plan/vencimiento/días/gracia/última verificación/códigos + renovación); `cambiarVista` y script fuerzan `/activacion`/ocultan SPA y deshabilitan navegación cuando `blocked`.
+- **Verificación:** `npm run build` **OK**. `npx vitest run src/licensing src/updates` **2 files, 18 tests PASS** (éxito+biding, mismatch HWID/instancia, firma inválida, revocado/suspendido/expirado/vacío, exp corto con vigencia contractual, IDs/días). `docker compose up -d --build app` **OK**. Runtime: `GET /health` 200; `GET /licensing/activation-status` `blocked:true` sin licencia + `machineIdHash/instanceId` correctos. DevTools (390×844, `http://localhost:3000/`) → redirect `/activacion`, snapshot OK (HWIDs/copiar/campos), `__licensingIsBlocked()` true, tab suscripción oculta, nav bloqueada, intento activar token inválido muestra error claro (en entorno actual sin `LICENSE_PUBLIC_KEY_PEM` configurada: “No hay clave pública…”). Consola: 403 esperados por bloqueo + avisos de labels/form preexistentes.
+- **Pendiente:** E2E con token real emitido por Pilar 1 (`issue-token`, binding exacto en central) y entorno con `LICENSE_PUBLIC_KEY_PEM` configurada; verificación UI caso licencia activa/renovación en sesión real. No modificar `deploy/docker-compose.prod.yml` ni `deploy/windows-installer/bootstrap.ps1` (modificados/untracked previos, ajenos).
+
+---
+
+> Estado previo: **2026-11-12 (SDD licenciamiento F1–F4.8; preparación F5 completada + consolidación instalador Windows F3.6)**. Sistema **estable** (dev `:3000`, `TYPEORM_SYNCHRONIZE=true` en runtime dev; CLI migraciones operativo con `synchronize:false`).
 
 ## Sesión 2026-11-11 (cont.) — SDD licenciamiento y actualizaciones on-prem (aprobado, sin implementación de código)
 
