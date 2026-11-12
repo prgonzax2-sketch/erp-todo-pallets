@@ -12,13 +12,21 @@ ERP para operación de aserraderos: producción por lotes/paquetes, componentes 
 - Node.js 22+ y npm (desarrollo local).
 - Docker + Docker Compose (ejecución recomendada).
 
-## Configuración
-1. Copiá `.env.example` a `.env` y ajustá credenciales/puertos.
+## Instalación en Windows (cliente, recomendada)
+La instalación en equipos cliente se realiza mediante el **instalador `setup.exe` (Inno Setup, un solo clic)** proporcionado al cliente.  
+- El instalador despliega los artefactos de producción (`docker-compose.prod.yml`, `.env.example`, `bootstrap.ps1`) y ejecuta el bootstrap interno de forma oculta: verifica Docker activo, crea `dbdata/`, `backups/`, `license/`, genera `.env` con credenciales seguras si no existe y levanta el stack con `docker compose -f docker-compose.prod.yml up -d`.
+- Crea un acceso directo **"Sistema Aserradero ERP"** a `http://localhost:3000`.
+- Requisito: **Docker Desktop instalado y en ejecución**. Detalles de compilación/empaquetado: `docs/windows-packaging.md`.
+
+> La instalación manual por consola (`install.sh` / `install.bat`) está **deprecada y fue eliminada** del repositorio.
+
+## Configuración (desarrollo / referencia)
+1. Copiá `.env.example` a `.env` y ajustá credenciales/puertos (en instalación cliente esto lo realiza automáticamente el bootstrap del `setup.exe`).
    ```bash
    # PowerShell
    Copy-Item .env.example .env
    ```
-2. `docker-compose.yml` carga `.env` (gitignored). No uses las credenciales de ejemplo en entornos compartidos/producción.
+2. `docker-compose.yml` (dev) y `deploy/docker-compose.prod.yml` (prod) cargan `.env` (gitignored). No uses credenciales de ejemplo en entornos compartidos/producción.
 
 ### Licenciamiento y actualizaciones on-prem (Pilar 2, producción/piloto F5)
 - **Servidor de licencias (producción):** `LICENSE_SERVER_URL=https://licencias.example.com` (ajustar si la URL pública difiere).
@@ -27,14 +35,16 @@ ERP para operación de aserraderos: producción por lotes/paquetes, componentes 
 - **Piloto / hardening de despliegue inicial (obligatorio en esta etapa):**
   - `LICENSE_ENFORCEMENT=grace` (no `strict` durante piloto).
   - `UPDATES_AUTO_ENABLED=false` (**no habilitar auto-update estricto**).
-- **Seguridad/volúmenes:** `./license` (estado/identidad D4) y `./backups` con permisos restringidos; DB aislada en `deploy/docker-compose.prod.yml` (sin puertos publicados, red interna). Headers de seguridad vía `helmet` en `src/main.ts` (CSP deshabilitada por compatibilidad SPA inline; resto de protecciones activas). Revisar CORS/TLS en el reverse proxy.
+- **Seguridad/volúmenes:** `./license` (estado/identidad D4) y `./backups` con permisos restringidos (bootstrap/instalador + `Dockerfile`); DB aislada en `deploy/docker-compose.prod.yml` (sin puertos publicados, red interna). Headers de seguridad vía `helmet` en `src/main.ts` (CSP deshabilitada por compatibilidad SPA inline; resto de protecciones activas). Revisar CORS/TLS en el reverse proxy.
 
-## Ejecución con Docker
+## Ejecución con Docker (desarrollo)
 ```bash
 docker-compose up -d --build
 ```
 - App: <http://localhost:3000>
 - PostgreSQL: `localhost:${DB_PORT_PUBLISH:-5432}` (según `.env`)
+
+**Producción (cliente Windows):** usar el `setup.exe` (ver arriba). El stack productivo usa `deploy/docker-compose.prod.yml` con imagen GHCR y `.env` autogenerado.
 
 ## Desarrollo local
 ```bash

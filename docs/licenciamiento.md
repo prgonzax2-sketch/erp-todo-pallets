@@ -18,12 +18,17 @@ LICENSE_PUBLIC_KEY_PEM="-----BEGIN PUBLIC KEY-----\nMIICIjANBgkqhkiG9w0BAQEFAAOC
 - `UPDATES_AUTO_ENABLED=false` (**no habilitar auto-update estricto**).
 - `UPDATE_CHANNEL=stable`, intervalos/gracia según `.env.example`.
 
+## Instalación (Windows, un solo clic)
+- **Método soportado:** instalador `setup.exe` (Inno Setup) proporcionado al cliente. Empaqueta `deploy/docker-compose.prod.yml`, `.env.example` y `deploy/windows-installer/bootstrap.ps1`; el bootstrap (oculto) verifica Docker activo, crea `dbdata/`, `backups/`, `license/`, genera `.env` con credenciales seguras si falta y ejecuta `docker compose -f docker-compose.prod.yml up -d`. Crea acceso directo **"Sistema Aserradero ERP"** a `http://localhost:3000`.
+- **Deprecado/eliminado:** instalación manual por consola (`deploy/install.sh`, `deploy/install.bat`).
+- Guía de empaquetado/compilación: `docs/windows-packaging.md`.
+
 ## Hardening base (despliegue)
 - **DB aislada:** `deploy/docker-compose.prod.yml` sin `ports` en `db`, red interna `internal`, `no-new-privileges`.
-- **Volúmenes sensibles:** `./license` (identidad/estado D4) y `./backups` con permisos restringidos (instaladores `deploy/install.sh|.bat`, `Dockerfile` crea dirs con `chmod 700`).
+- **Volúmenes sensibles:** `./license` (identidad/estado D4) y `./backups` con permisos restringidos (bootstrap del instalador + `Dockerfile` crea dirs con `chmod 700`).
 - **Headers:** `helmet` activo en `src/main.ts` (CSP deshabilitada por SPA inline; resto de protecciones por defecto). TLS/CORS/rate-limits finos y alertas se gestionan en infraestructura/proxy/operación.
 
 ## Referencias
 - SDD: `specs/licenciamiento-actualizaciones-onprem/{spec,plan,tasks}.md`
 - Runbooks: `docs/runbooks/update-recovery.md`, `docs/migrations.md`
-- Instalación: `deploy/install.sh`, `deploy/install.bat`, `deploy/docker-compose.prod.yml`
+- Instalación/empaquetado: `docs/windows-packaging.md`, `deploy/windows-installer/setup.iss`, `deploy/windows-installer/bootstrap.ps1`, `deploy/docker-compose.prod.yml`
