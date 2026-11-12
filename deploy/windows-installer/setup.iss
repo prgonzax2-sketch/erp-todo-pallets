@@ -38,8 +38,8 @@ Source: "..\..\.env.example"; DestDir: "{app}"; Flags: ignoreversion
 Source: "bootstrap.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-; Acceso directo en Escritorio al sistema local
-Name: "{userdesktop}\Sistema Aserradero ERP"; Filename: "{#MyAppURL}"; Tasks: desktopicon
+; Acceso directo en Escritorio al sistema local (común a todos los usuarios)
+Name: "{commondesktop}\Sistema Aserradero ERP"; Filename: "{#MyAppURL}"; Tasks: desktopicon
 ; Acceso directo adicional en menú inicio (opcional, útil)
 Name: "{group}\Sistema Aserradero ERP"; Filename: "{#MyAppURL}"
 
