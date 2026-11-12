@@ -1,5 +1,6 @@
-# Compose de producción (F3.2) - Sistema Aserradero
-# Usa imagen versionada desde GHCR (no build local). DB aislada del host (sin ports publicados).
+# Compose de producción (F3.2/F5) - Sistema Aserradero
+# Usa imagen versionada desde GHCR (no build local). Piloto: LICENSE_ENFORCEMENT=grace, UPDATES_AUTO_ENABLED=false.
+# Hardening: DB aislada del host (SIN ports publicados), solo red interna; volúmenes ./license ./backups con permisos restringidos.
 # Ejecutar desde ./deploy con: docker compose -f docker-compose.prod.yml --env-file .env up -d
 
 services:
@@ -20,6 +21,7 @@ services:
       TZ: ${TZ:-America/Argentina/Buenos_Aires}
       TYPEORM_SYNCHRONIZE: "false"
       # Licenciamiento / updates (estado espejo en volumen /app/license)
+      # Piloto F5: LICENSE_ENFORCEMENT=grace, UPDATES_AUTO_ENABLED=false (sin auto-update estricto)
       APP_VERSION: ${APP_VERSION:-0.0.1}
       LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}
       LICENSE_PUBLIC_KEY_PEM: ${LICENSE_PUBLIC_KEY_PEM:-}
@@ -44,6 +46,8 @@ services:
         condition: service_healthy
     networks:
       - internal
+    security_opt:
+      - no-new-privileges:true
 
   db:
     image: postgres:15
@@ -55,7 +59,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-    # Sin ports: DB aislada del host, accesible solo en red interna
+    # Aislamiento DB (hardening): SIN ports/exposición al host, accesible solo en red interna 'internal'
     volumes:
       - ./dbdata:/var/lib/postgresql/data
     healthcheck:
@@ -65,6 +69,8 @@ services:
       retries: 10
     networks:
       - internal
+    security_opt:
+      - no-new-privileges:true
 
 networks:
   internal:

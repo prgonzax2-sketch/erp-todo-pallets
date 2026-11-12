@@ -49,7 +49,10 @@ check_docker() {
 
 ensure_dirs() {
   mkdir -p dbdata backups license
-  say "Directorios verificados/creados: ./dbdata ./backups ./license"
+  # Hardening base: permisos estructurales de volúmenes (estado sensible / respaldos)
+  chmod 700 license 2>/dev/null || true
+  chmod 750 backups dbdata 2>/dev/null || true
+  say "Directorios verificados/creados: ./dbdata ./backups ./license (permisos endurecidos best-effort)"
 }
 
 write_env() {
@@ -80,7 +83,8 @@ write_env() {
   read -r -p "APP_IMAGE_TAG (tag o @sha256:digest) [latest]: " app_image_tag || true; app_image_tag="${app_image_tag:-latest}"
 
   local license_url enforcement channel
-  read -r -p "LICENSE_SERVER_URL []: " license_url || true; license_url="${license_url:-}"
+  # Piloto F5: defaults seguros (no auto-update estricto). URL prod configurable.
+  read -r -p "LICENSE_SERVER_URL [https://licencias.example.com]: " license_url || true; license_url="${license_url:-https://licencias.example.com}"
   read -r -p "LICENSE_ENFORCEMENT [grace]: " enforcement || true; enforcement="${enforcement:-grace}"
   read -r -p "UPDATE_CHANNEL [stable]: " channel || true; channel="${channel:-stable}"
 
@@ -101,8 +105,12 @@ write_env() {
   fi
 
   umask 077
+  # Clave pública RSA productiva pinneada (Pilar 1, kid prod-20261111). Sin claves privadas.
+  local license_pubkey_pem='-----BEGIN PUBLIC KEY-----\nMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA/haJWv8Qy5YJwT/gZKrB\nVJ2snwn1y3xoRoRz6QQu2sRuT5S/8lag8cm6OjfiOUTi/pXGyPv8hNYiPuEbI50v\na3kUovqOgWJbXo0HNX6dcphm41Z5p4pG9V8ZxFg383ju7NpgxL2QH5n+iTkr2fNp\n5iNepo26P6vDjW8G/0hwzH7X+AbD3/rlfOMUqXj3BosfSqtmBh7S7w3R1nt3dxHo\nJijaJ2jg9TprP+TSrr+bRqQFa+jlSW4ybUHikC3vDhCDDL6Vf8oa6rzW3TMxV9IO\nGN9MpLgAJNf4xIJmzLZf0HJ7WzE6sLKX3Oocd2VX3e4RlV3zjSdL/mtN/bgo48tp\nIbWsp2bBqA2XGfvpRSDDHGslIbbfvDI1g65nf8dOHmxsyGokCOE4AlpuBSo2BjUk\nLI/ioy81C5eSYuN+zUbsGwzxzcf4AEU59upMZ6lFCcADutTCjk3pNSxQ9NSMCFve\nqMTnos6BrGKmMzVGYUR7EHof+hP5IsrzmzeQEwoEYm8ATdyjzPRgJBH37dqecrSz\nqhiN7pJH4qd0h4Zdb8JbwDv8wRk8QIv+eHK+7zZTr/er77VMDZ9Wj9E910KMM8VD\nXSTd7UQ9HfycIyZwvZtBGBGmzdC0Q/cD7U8pYO13FW4M/3l/lDeKCtEkNf4ovU3S\n18uNU/XDvuX9kJQAlwNDRAMCAwEAAQ==\n-----END PUBLIC KEY-----'
+
   cat > "$envfile" <<EOF
-# Generado por deploy/install.sh (F3.1). No commitear. Permisos restringidos recomendados.
+# Generado por deploy/install.sh (F3.1/F5 piloto). No commitear. Permisos restringidos recomendados.
+# Piloto: LICENSE_ENFORCEMENT=grace, UPDATES_AUTO_ENABLED=false (no auto-update estricto).
 # Base de datos
 DB_HOST=db
 DB_PORT=5432
@@ -125,10 +133,10 @@ JWT_SECRET=${jwt_secret}
 APP_IMAGE=${app_image}
 APP_IMAGE_TAG=${app_image_tag}
 
-# Licenciamiento / updates (Pilar 2)
+# Licenciamiento / updates (Pilar 2, producción)
 APP_VERSION=0.0.1
 LICENSE_SERVER_URL=${license_url}
-LICENSE_PUBLIC_KEY_PEM=
+LICENSE_PUBLIC_KEY_PEM="${license_pubkey_pem}"
 LICENSE_ENFORCEMENT=${enforcement}
 LICENSE_CHECK_INTERVAL_MS=86400000
 LICENSE_GRACE_HOURS=72

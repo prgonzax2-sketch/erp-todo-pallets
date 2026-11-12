@@ -34,7 +34,11 @@ echo Docker OK. Compose: %COMPOSE_CMD%
 if not exist "dbdata" mkdir "dbdata"
 if not exist "backups" mkdir "backups"
 if not exist "license" mkdir "license"
-echo Directorios verificados/creados: .\dbdata .\backups .\license
+REM Hardening base (permisos estructurales best-effort en Windows/NTFS)
+icacls "license" /inheritance:r /grant:r "%USERNAME%:(OI)(CI)F" >nul 2>nul
+icacls "backups" /inheritance:r /grant:r "%USERNAME%:(OI)(CI)M" >nul 2>nul
+icacls "dbdata" /inheritance:r /grant:r "%USERNAME%:(OI)(CI)M" >nul 2>nul
+echo Directorios verificados/creados: .\dbdata .\backups .\license (permisos endurecidos best-effort)
 
 if exist ".env" (
   set /p OVERWRITE=.env ya existe. Sobrescribir? [y/N]: 
@@ -77,12 +81,13 @@ set "APP_IMAGE_TAG=latest"
 set /p APP_IMAGE_TAG=APP_IMAGE_TAG (tag o @sha256:digest) [latest]: 
 if "!APP_IMAGE_TAG!"=="" set "APP_IMAGE_TAG=latest"
 
-set "LICENSE_URL="
-set /p LICENSE_URL=LICENSE_SERVER_URL []: 
+set "LICENSE_URL=https://licencias.example.com"
+set /p LICENSE_URL=LICENSE_SERVER_URL [https://licencias.example.com]: 
+if "!LICENSE_URL!"=="" set "LICENSE_URL=https://licencias.example.com"
 
 set "ENFORCEMENT=grace"
 set /p ENFORCEMENT=LICENSE_ENFORCEMENT [grace]: 
-if "!ENFORCEMENT!"=="" set "ENFORCEMENT=grace"
+if "!ENFORCEMENT!"=="" set "ENFORCEMENT=grace" REM Piloto F5: no strict auto-update
 
 set "CHANNEL=stable"
 set /p CHANNEL=UPDATE_CHANNEL [stable]: 
@@ -107,8 +112,11 @@ if not "!ADMIN_EMAIL!"=="" (
 for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "[Convert]::ToBase64String((1..48|%%{[byte](Get-Random -Max 256)})) -replace '[+/=]','A' | %%{ $_.Substring(0,[Math]::Min(48,$_.Length)) }"`) do set "JWT_SECRET=%%S"
 for /f "usebackq delims=" %%P in (`powershell -NoProfile -Command "[Convert]::ToBase64String((1..24|%%{[byte](Get-Random -Max 256)})) -replace '[+/=]','x' | %%{ $_.Substring(0,[Math]::Min(24,$_.Length)) }"`) do set "DB_PASS=%%P"
 
+set "LICENSE_PUBKEY_PEM=-----BEGIN PUBLIC KEY-----\nMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA/haJWv8Qy5YJwT/gZKrB\nVJ2snwn1y3xoRoRz6QQu2sRuT5S/8lag8cm6OjfiOUTi/pXGyPv8hNYiPuEbI50v\na3kUovqOgWJbXo0HNX6dcphm41Z5p4pG9V8ZxFg383ju7NpgxL2QH5n+iTkr2fNp\n5iNepo26P6vDjW8G/0hwzH7X+AbD3/rlfOMUqXj3BosfSqtmBh7S7w3R1nt3dxHo\nJijaJ2jg9TprP+TSrr+bRqQFa+jlSW4ybUHikC3vDhCDDL6Vf8oa6rzW3TMxV9IO\nGN9MpLgAJNf4xIJmzLZf0HJ7WzE6sLKX3Oocd2VX3e4RlV3zjSdL/mtN/bgo48tp\nIbWsp2bBqA2XGfvpRSDDHGslIbbfvDI1g65nf8dOHmxsyGokCOE4AlpuBSo2BjUk\nLI/ioy81C5eSYuN+zUbsGwzxzcf4AEU59upMZ6lFCcADutTCjk3pNSxQ9NSMCFve\nqMTnos6BrGKmMzVGYUR7EHof+hP5IsrzmzeQEwoEYm8ATdyjzPRgJBH37dqecrSz\nqhiN7pJH4qd0h4Zdb8JbwDv8wRk8QIv+eHK+7zZTr/er77VMDZ9Wj9E910KMM8VD\nXSTd7UQ9HfycIyZwvZtBGBGmzdC0Q/cD7U8pYO13FW4M/3l/lDeKCtEkNf4ovU3S\n18uNU/XDvuX9kJQAlwNDRAMCAwEAAQ==\n-----END PUBLIC KEY-----"
+
 (
-echo # Generado por deploy/install.bat ^(F3.1^). No commitear.
+echo # Generado por deploy/install.bat ^(F3.1/F5 piloto^). No commitear.
+echo # Piloto: LICENSE_ENFORCEMENT=grace, UPDATES_AUTO_ENABLED=false ^(no auto-update estricto^).
 echo # Base de datos
 echo DB_HOST=db
 echo DB_PORT=5432
@@ -131,10 +139,10 @@ echo # Imagen ^(GHCR, F3.2^)
 echo APP_IMAGE=!APP_IMAGE!
 echo APP_IMAGE_TAG=!APP_IMAGE_TAG!
 echo.
-echo # Licenciamiento / updates ^(Pilar 2^)
+echo # Licenciamiento / updates ^(Pilar 2, produccion^)
 echo APP_VERSION=0.0.1
 echo LICENSE_SERVER_URL=!LICENSE_URL!
-echo LICENSE_PUBLIC_KEY_PEM=
+echo LICENSE_PUBLIC_KEY_PEM="!LICENSE_PUBKEY_PEM!"
 echo LICENSE_ENFORCEMENT=!ENFORCEMENT!
 echo LICENSE_CHECK_INTERVAL_MS=86400000
 echo LICENSE_GRACE_HOURS=72
