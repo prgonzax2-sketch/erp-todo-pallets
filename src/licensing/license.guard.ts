@@ -35,14 +35,15 @@ export class LicenseGuard implements CanActivate {
   }
 
   private isWhitelisted(path: string): boolean {
-    // Recursos/health/auth/licensing y estáticos necesarios
-    if (path === '/' || path === '' ) return true;
+    // Recursos/health/auth/licensing/activación y estáticos necesarios
+    if (path === '/' || path === '') return true;
     if (path === '/index.html' || path === '/styles.css' || path === '/favicon.ico') return true;
+    if (path === '/activacion' || path.startsWith('/activacion/')) return true;
     if (path === '/health' || path.startsWith('/health/')) return true;
-    if (path.startsWith('/licensing')) return true; // endpoints de estado/activación/check
+    if (path.startsWith('/licensing')) return true; // estado/activación/check (públicos y admin protegidos por sus guards)
     if (path.startsWith('/auth')) return true; // login/auth
     // estáticos servidos desde raíz si aplica
-    if (path.endsWith('.css') || path.endsWith('.js') || path.endsWith('.png') || path.endsWith('.jpg') || path.endsWith('.svg') || path.endsWith('.ico') || path.endsWith('.webp')) return true;
+    if (path.endsWith('.css') || path.endsWith('.js') || path.endsWith('.png') || path.endsWith('.jpg') || path.endsWith('.svg') || path.endsWith('.ico') || path.endsWith('.webp') || path.endsWith('.map')) return true;
     return false;
   }
 }

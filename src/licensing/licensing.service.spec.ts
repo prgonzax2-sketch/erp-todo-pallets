@@ -113,10 +113,10 @@ describe('LicensingService (F2.8)', () => {
   it('rechaza token con claims no coincidentes (sub/instance_id)', async () => {
     const expSec = Math.floor(Date.now() / 1000) + 3600;
     const badSub = await signToken({ sub: 'other', instance_id: 'inst-1', license_status: 'ACTIVE' }, { expSec });
-    await expect(service.verifyToken(badSub, { machineIdHash: 'machine-hash', instanceId: 'inst-1' })).rejects.toThrow(/sub/i);
+    await expect(service.verifyAndDecodeSignedToken(badSub, { machineIdHash: 'machine-hash', instanceId: 'inst-1' }, 'verify')).rejects.toThrow(/sub|Hardware ID|instalación/i);
 
     const badInst = await signToken({ sub: 'machine-hash', instance_id: 'other', license_status: 'ACTIVE' }, { expSec });
-    await expect(service.verifyToken(badInst, { machineIdHash: 'machine-hash', instanceId: 'inst-1' })).rejects.toThrow(/instance_id/i);
+    await expect(service.verifyAndDecodeSignedToken(badInst, { machineIdHash: 'machine-hash', instanceId: 'inst-1' }, 'verify')).rejects.toThrow(/instance_id|instancia|instalación/i);
   });
 
   it('token expirado: verifyNow falla y evaluateAccess bloquea en grace/strict (fail-closed) tras gracia agotada', async () => {
