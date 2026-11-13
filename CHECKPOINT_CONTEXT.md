@@ -1,6 +1,27 @@
 # CHECKPOINT_CONTEXT.md
 
-> Estado operativo resumido. Memoria vigente: `MEMORY.md`. Instrucciones: `AGENTS.md`. Actualizado: **2026-11-12 (licenciamiento cliente: activación por token JWS + `/activacion` + “Mi Suscripción”, rama `feature/agente-licencia-activacion-ui`)**. Sistema **estable** (dev `:3000`, `TYPEORM_SYNCHRONIZE=true` en runtime dev). **Sin push/merge.**
+> Estado operativo resumido. Memoria vigente: `MEMORY.md`. Instrucciones: `AGENTS.md`. Actualizado: **2026-11-12 (SDD Reportes T1-T4 + instalador offline/devops, rama `feature/agente-licencia-activacion-ui`, push solicitado)**. Sistema **estable** (dev `:3000`, `TYPEORM_SYNCHRONIZE=true` en runtime dev).
+
+## Sesión 2026-11-12 (cont.) — Reportes UX (SDD T1-T4) + artefactos instalador offline / GHCR
+
+**Rama:** `feature/agente-licencia-activacion-ui` (local). **Commits nuevos (sin merge):** `1faf48a` `docs(reportes): SDD T0/T1 spec-plan-tasks con D-A/D-B/D-C y matriz`, `1223a41` `feat(reportes): T2 auto-preview, T3 drill-down modal universal y T4 impresion consolidada (D-A/D-B/D-C)`, `2cd1c46` `chore(devops): endurecer ignores, workflow GHCR por tag y script offline images`, `757cd29` `chore(installer): script PowerShell de carga offline de imagenes con espera de Docker` (amend con inicio interactivo opcional `docker compose up -d`).
+
+### Reportes — SDD `specs/reportes-ux-detalle-impresion/` (D-A/D-B/D-C)
+- **T1 matriz:** detalle por módulo con fuente/filtros/viabilidad/fallback (ventas `GET /salidas-stock` alta; gastos/rollos/cc-fleteros/turnos/subproductos viabilidad media con fetch rango+filtro cliente; **baja/sin endpoint listado → fallback estático:** `rrhh_partes_diarios`, `produccion`, `pallets_produccion`).
+- **T2 (D-A, `index.html`):** eliminado `#rpt-btn-ver`; auto-preview al entrar a Reportes y al cambiar cualquier filtro; **debounce ~300ms** en inputs continuos; **token de secuencia** (`_rptReqSeq`) para descartar respuestas obsoletas; `rptBuildParams`/CSV preservados.
+- **T3 (D-B):** drill-down en modal para **todos** los módulos (paridad Ventas). Ventas mantiene remitos reales; módulos sin fuente/bucket viable muestran **fallback visual estático** (contexto + totales/datos de fila, **sin inventar registros, sin cambios BE**). Render seguro.
+- **T4 (D-C):** botón dedicado “Imprimir reporte completo”, fetch de 9 módulos en **lotes de 3** (`Promise.allSettled`), **render diferido** por módulo (RAF/`setTimeout(0)`), progreso UI “Generando sección X de 9…”, consolidado en `#rpt-print-root` e impresión vía `@media print` + `window.print()` (errores parciales tolerados).
+- **Verificación:** `npm run build` **OK** (exit 0). `index.html` **UTF-8 sin BOM**. DevTools MCP interactivo no ejecutado en esta sesión (recomendado smoke read-only admin en `:3000`: auto-preview, modal/fallback por módulo, impresión, CSV, consola, 390×844).
+
+### Instalador offline / devops
+- **Ignores endurecidos (ERP y Auth, audit):** exclusión estricta de `.env`/`.env.*` (con `!.env.example` donde aplica), `LICENSE_PUBLIC_KEY_PEM` y material criptográfico local (`*.pem/*.key/*.p12/*.pfx/*.jks/*.keystore/*.jwk/*.asc/*.gpg`, `id_rsa*`, `id_ed25519*`, `*.der/*.cer/*.crt/*.csr`, `*.secrets.*`, `secrets.local.*`, `license/`). ERP: `.gitignore`/`.dockerignore`; Auth (`C:\Users\Noxi-PC\sistema-aserradero-auth`): `.gitignore`/`.dockerignore` endurecidos en disco (repo separado, **no** incluidos en commit ERP; `private.pem/public.pem` locales quedan ignorados, no commiteados).
+- **GHCR:** `.github/workflows/docker-publish.yml` (ERP) — build & push a GHCR en tags `v*` (`docker/metadata-action`, `build-push-action`, `GITHUB_TOKEN` packages:write).
+- **Offline:** `build-offline-images.bat` (build ERP+Auth y `docker save` a `.tar` en `dist-installer\images`, `VERSION_TAG`/`AUTH_CONTEXT` configurables). `dist-installer/load-offline-images.ps1` (espera demonio Docker `docker info` con reintentos 5s, timeout 5min; `docker load -i` de `*.tar`; toda salida a `docker-load.log` via `Start-Transcript`; prompt interactivo post-carga para `docker compose up -d` si existe `docker-compose.yml` en raíz, o aviso de configurar `.env`/arranque manual).
+
+### Estado git/push
+- `.env` local **existe** y está **ignorado** (`git check-ignore -v .env` → `.gitignore:39:.env`). **Working tree no limpio** por cambios/untracked preexistentes ajenos a esta sesión (p.ej. `M deploy/docker-compose.prod.yml`, `M deploy/windows-installer/bootstrap.ps1`, múltiples `??` specs/src/docs/scripts/config legados/untracked) — **no commiteados**. Push solicitado por usuario a ejecutar sobre commits de esta rama.
+
+---
 
 ## Sesión 2026-11-12 — Activación de licencia por token (Pilar 1) + UI bloqueo/renovación (ERP)
 
