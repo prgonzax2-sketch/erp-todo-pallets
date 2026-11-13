@@ -1,0 +1,51 @@
+node_modules
+dist
+build
+coverage
+.git
+.gitignore
+*.log
+npm-debug.log*
+
+# Environment / secrets / material criptográfico local
+.env
+.env.*
+!.env.example
+LICENSE_PUBLIC_KEY_PEM
+license
+license/
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.jwk
+*.asc
+*.gpg
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+*.der
+*.cer
+*.crt
+*.csr
+*.secrets.*
+secrets.local.*
+
+# Local data, backups, quarantined legacy
+backups
+archive
+
+# Editor/OS
+.vscode
+.idea
+.DS_Store
+
+# Temp/build artifacts
+*.tsbuildinfo
+*.check
+container_index.html
+.tmp
+.temp
