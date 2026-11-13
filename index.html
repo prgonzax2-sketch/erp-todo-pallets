@@ -669,14 +669,31 @@
                         <div class="block sm:col-span-2 lg:col-span-4">
                             <div class="flex flex-col sm:flex-row gap-2">
                                 <button id="rpt-btn-descargar" type="submit" class="flex-1 px-4 py-2 rounded font-bold text-sm shadow-sm" style="background:var(--ap-forest); color:#07130d; border:1px solid var(--ap-forest);">Descargar Reporte (CSV)</button>
-                                <button id="rpt-btn-ver" type="button" onclick="rptPrevisualizarJson(event)" class="flex-1 px-4 py-2 rounded font-bold text-sm" style="background:var(--ap-elevated,#243038); color:var(--ap-ink,#e8ece6); border:1px solid var(--ap-border,rgba(232,236,230,.12));">Ver en Pantalla</button>
+                                <button id="rpt-btn-imprimir" type="button" onclick="rptImprimirReporteCompleto(event)" class="flex-1 px-4 py-2 rounded font-bold text-sm" style="background:var(--ap-elevated,#243038); color:var(--ap-ink,#e8ece6); border:1px solid var(--ap-border,rgba(232,236,230,.12));">Imprimir reporte completo</button>
                             </div>
                         </div>
                     </form>
                     <div id="rpt-msg" class="text-xs mt-3 min-h-[1rem]" style="color:var(--ap-muted);" aria-live="polite"></div>
+                    <div id="rpt-progress" class="hidden mt-3 p-3 rounded text-xs flex items-center gap-2" style="border:1px solid var(--ap-border,rgba(232,236,230,.12));background:var(--ap-elevated,#243038);color:var(--ap-ink,#e8ece6);" aria-live="polite">
+                        <span class="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" aria-hidden="true"></span>
+                        <span id="rpt-progress-text">Generando reporte...</span>
+                    </div>
                     <div id="rpt-preview-container" class="hidden mt-6 overflow-x-auto ap-card" style="border:1px solid var(--ap-border,rgba(232,236,230,.12));">
                         <table id="rpt-preview-table" class="w-full text-sm text-left" style="min-width:640px; border-collapse:collapse;"></table>
                     </div>
+                    <div id="rpt-print-root" class="hidden mt-6"></div>
+                    <style id="rpt-print-style">
+                      @media print {
+                        body * { visibility: hidden !important; }
+                        #rpt-print-root, #rpt-print-root * { visibility: visible !important; }
+                        #rpt-print-root { display: block !important; position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; background: #fff !important; color: #111 !important; }
+                        .rpt-print-section { page-break-inside: avoid; break-inside: avoid; margin-bottom: 14px; }
+                        .rpt-print-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+                        .rpt-print-table th, .rpt-print-table td { border: 1px solid #d1d5db; padding: 4px 6px; text-align: left; }
+                        .rpt-print-table th { background: #f3f4f6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                        .rpt-print-cover { margin-bottom: 16px; border-bottom: 2px solid #111; padding-bottom: 8px; }
+                      }
+                    </style>
                 </div>
             </div>
 
@@ -9998,7 +10015,7 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
         const _guardarPlanillaProduccionBase = (typeof guardarPlanillaProduccion==='function') ? guardarPlanillaProduccion : null;
         window.guardarPlanillaProduccion = async function(){ var r; if(_guardarPlanillaProduccionBase) r = await _guardarPlanillaProduccionBase.apply(this, arguments); try{ if(typeof prodActualizarResumenSubproductos==='function') prodActualizarResumenSubproductos(); }catch(e){} return r; };
         const _cambiarVistaBase = (typeof cambiarVista==='function') ? cambiarVista : null;
-        window.cambiarVista = function(vista){ if(_cambiarVistaBase) try{ _cambiarVistaBase(vista); }catch(e){} if(vista==='rollos-fletes'){ try{ rfCambiarTabPrincipal('playa'); rfCargarRemanenteRollos(); }catch(e){} /* sp movido a Stock */ } if(vista==='gastos' && typeof ggInit==='function'){ try{ ggInit(); }catch(e){} } if(vista==='produccion'){ try{ if(typeof prodActualizarResumenSubproductos==='function') prodActualizarResumenSubproductos(); }catch(e){} } if(vista==='reportes'){ try{ if(typeof rptLimpiarPreview==='function') rptLimpiarPreview(); }catch(e){} } };
+        window.cambiarVista = function(vista){ if(_cambiarVistaBase) try{ _cambiarVistaBase(vista); }catch(e){} if(vista==='rollos-fletes'){ try{ rfCambiarTabPrincipal('playa'); rfCargarRemanenteRollos(); }catch(e){} /* sp movido a Stock */ } if(vista==='gastos' && typeof ggInit==='function'){ try{ ggInit(); }catch(e){} } if(vista==='produccion'){ try{ if(typeof prodActualizarResumenSubproductos==='function') prodActualizarResumenSubproductos(); }catch(e){} } if(vista==='reportes'){ try{ if(typeof rptAlEntrarVista==='function') rptAlEntrarVista(); else if(typeof rptLimpiarPreview==='function') rptLimpiarPreview(); }catch(e){} } };
 
         // =================== DASHBOARD TN/P²/TODOS (canónico, SDD dashboard-totales-tn-p2 + modern UI/charts) ===================
         let dbCharts = window.dbCharts || {}; window.dbCharts = dbCharts;
@@ -11036,50 +11053,187 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
       body.innerHTML='<div class="py-6 text-center" style="color:var(--ap-ember,#f87171)">No se pudo cargar el detalle: '+rptEsc((err&&err.message)||err)+'</div>';
     }
   }
+  var _rptReqSeq = 0;
+  var _rptDebounceTimer = null;
+  var _rptLastJson = null;
+
+  function rptSetProgress(show, text){
+    var el=document.getElementById('rpt-progress'); if(!el) return;
+    el.classList.toggle('hidden', !show);
+    var t=document.getElementById('rpt-progress-text'); if(t && text) t.textContent=text;
+  }
+
+  function rptRenderFallbackDetalle(ctx){
+    rptEnsureDetalleModal();
+    rptAbrirDetalleModal();
+    var titulo=document.getElementById('rpt-detalle-titulo');
+    var sub=document.getElementById('rpt-detalle-sub');
+    var body=document.getElementById('rpt-detalle-body');
+    var mod = (ctx && ctx.modulo) || (ctx && ctx.meta && ctx.meta.reporte) || 'módulo';
+    var bucket = (ctx && (ctx.bucketLabel || ctx.bucket_inicio || ctx.bucket)) || 'Sin bucket';
+    var rango = (ctx && ctx.rangoTxt) || ((ctx && ctx.bucket_inicio && ctx.bucket_fin) ? (ctx.bucket_inicio + ' a ' + ctx.bucket_fin) : '—');
+    var aserr = (ctx && ctx.aserradero) || (ctx && ctx.meta && ctx.meta.aserradero) || '—';
+    if(titulo) titulo.textContent = 'Detalle — ' + mod;
+    if(sub) sub.textContent = 'Bucket: ' + bucket + ' · Rango: ' + rango + ' · Aserradero: ' + aserr;
+    var row = (ctx && ctx.row && typeof ctx.row==='object') ? ctx.row : null;
+    var rowsHtml = '';
+    if(row){
+      var keys = Object.keys(row);
+      rowsHtml = keys.map(function(k){
+        return '<tr class="border-b" style="border-color:var(--ap-border,rgba(232,236,230,.12))"><th class="px-3 py-2 text-left whitespace-nowrap" style="color:var(--ap-muted,#93a197)">'+rptEsc(rptHumanizeKey(k))+'</th><td class="px-3 py-2">'+rptEsc(row[k]==null?'':(typeof row[k]==='object'?JSON.stringify(row[k]):row[k]))+'</td></tr>';
+      }).join('');
+    }
+    if(body){
+      body.innerHTML =
+        '<div class="mb-3 p-3 rounded text-xs" style="background:var(--ap-elevated,#243038);border:1px solid var(--ap-border,rgba(232,236,230,.12));color:var(--ap-ink,#e8ece6)">'+
+          '<p class="font-semibold mb-1">Detalle de registros no disponible para este módulo/bucket.</p>'+
+          '<p style="color:var(--ap-muted,#93a197)">Se muestran los totales/datos disponibles de la fila seleccionada (sin inventar registros). Fuente de detalle por bucket no viable o sin endpoint listado.</p>'+
+        '</div>'+
+        (rowsHtml ? '<div class="overflow-auto"><table class="min-w-full text-xs"><tbody>'+rowsHtml+'</tbody></table></div>' : '<div class="text-xs" style="color:var(--ap-muted,#93a197)">Sin datos de fila disponibles.</div>');
+    }
+  }
+
+  async function rptFetchJsonPorParams(modulo, params){
+    var token = localStorage.getItem('token') || (typeof getToken==='function' ? getToken() : '') || '';
+    if(!token) throw new Error('Sesión no disponible.');
+    var base = (typeof API_URL!=='undefined' && API_URL) ? API_URL : '';
+    var url = base + '/reportes/' + encodeURIComponent(modulo) + '?' + params.toString();
+    var res = await fetch(url, { method:'GET', headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' }, cache:'no-store' });
+    if(!res.ok){
+      var msg = 'Error ' + res.status;
+      try{ var j = await res.json(); msg = (j && (j.message||j.error)) ? (Array.isArray(j.message)?j.message.join(', '):j.message) : msg; }catch(e){}
+      throw new Error(msg);
+    }
+    return await res.json();
+  }
+
+  function rptBucketCtx(row, meta){
+    var periodo = (meta && meta.periodo) || (document.getElementById('rpt-periodo')||{}).value || 'day';
+    var bi = row && row.bucket_inicio ? String(row.bucket_inicio).slice(0,10) : '';
+    var bf = bi ? rptBucketFin(bi, periodo) : '';
+    var bl = (row && row.bucket) || (bi ? (bi + (bf && bf!==bi ? (' a ' + bf) : '')) : '');
+    var aserr = (row && row.aserradero != null) ? String(row.aserradero) : '';
+    return { bucket_inicio: bi, bucket_fin: bf, bucketLabel: bl, aserradero: aserr, periodo: periodo };
+  }
+
+  async function rptAbrirDetalle(moduloReporte, row, meta){
+    var ctx = rptBucketCtx(row, meta);
+    ctx.row = row; ctx.meta = meta || {}; ctx.modulo = moduloReporte || (meta && meta.reporte) || '';
+    ctx.rangoTxt = (meta && meta.rango) ? ((meta.rango.desde||'')+' a '+(meta.rango.hasta||'')) : (ctx.bucket_inicio ? (ctx.bucket_inicio+' a '+(ctx.bucket_fin||ctx.bucket_inicio)) : '');
+    if(moduloReporte === 'ventas_remitos' && ctx.bucket_inicio){
+      return rptCargarDetalleBucket(ctx.bucket_inicio, ctx.bucket_fin, ctx.bucketLabel, ctx.aserradero, meta||{});
+    }
+    // D-B/T1: baja viabilidad o sin endpoint listado -> fallback estático
+    if(moduloReporte === 'produccion' || moduloReporte === 'pallets_produccion' || moduloReporte === 'rrhh_partes_diarios'){
+      return rptRenderFallbackDetalle(ctx);
+    }
+    rptEnsureDetalleModal();
+    rptAbrirDetalleModal();
+    var body=document.getElementById('rpt-detalle-body');
+    var titulo=document.getElementById('rpt-detalle-titulo');
+    var sub=document.getElementById('rpt-detalle-sub');
+    if(titulo) titulo.textContent = 'Detalle — ' + moduloReporte;
+    if(sub) sub.textContent = 'Bucket: ' + (ctx.bucketLabel||'—') + ' · Rango: ' + (ctx.rangoTxt||'—') + (ctx.aserradero?(' · Aserradero: '+ctx.aserradero):'');
+    if(body) body.innerHTML='<div class="flex items-center gap-2 py-6 justify-center" style="color:var(--ap-muted,#93a197)"><span class="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span><span>Cargando detalle...</span></div>';
+    try{
+      var token = localStorage.getItem('token') || (typeof getToken==='function' ? getToken() : '') || '';
+      if(!token) throw new Error('Sesión no disponible.');
+      var base = (typeof API_URL!=='undefined' && API_URL) ? API_URL : '';
+      var desde = ctx.bucket_inicio || (meta && meta.rango && meta.rango.desde) || '';
+      var hasta = ctx.bucket_fin || ctx.bucket_inicio || (meta && meta.rango && meta.rango.hasta) || '';
+      var aserr = ctx.aserradero && ctx.aserradero !== 'Sin asignar' ? ctx.aserradero : '';
+      var list = null, cols = null;
+      if(moduloReporte === 'gastos'){
+        var p = new URLSearchParams(); if(desde) p.set('fechaDesde',desde); if(hasta) p.set('fechaHasta',hasta);
+        var rg = await fetch(base + '/gastos?' + p.toString(),{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'},cache:'no-store'}); if(!rg.ok) throw new Error('Error '+rg.status);
+        var pg = await rg.json(); list = Array.isArray(pg) ? pg : (pg && Array.isArray(pg.items) ? pg.items : (pg && Array.isArray(pg.data) ? pg.data : []));
+        if(ctx.bucket_inicio){ list = list.filter(function(x){ return String(x.fecha||x.fechaGasto||'').slice(0,10)===ctx.bucket_inicio; }); }
+        cols = ['fecha','concepto','rubroId','proveedorId','monto','estado','aserraderoId'];
+      } else if(moduloReporte === 'rollos_ingresos'){
+        var pr = new URLSearchParams(); if(desde) pr.set('fechaDesde',desde); if(hasta) pr.set('fechaHasta',hasta); if(aserr) pr.set('aserradero',aserr);
+        var rr = await fetch(base + '/ingreso-rollos?' + pr.toString(),{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'},cache:'no-store'}); if(!rr.ok) throw new Error('Error '+rr.status);
+        var jr = await rr.json(); list = Array.isArray(jr) ? jr : (jr && Array.isArray(jr.items) ? jr.items : (jr && Array.isArray(jr.data) ? jr.data : []));
+        if(ctx.bucket_inicio){ list = list.filter(function(x){ return String(x.fecha||'').slice(0,10)===ctx.bucket_inicio; }); }
+        cols = ['fecha','nroRemito','proveedorMaderaId','fleteroId','toneladas','m3','aserradero'];
+      } else if(moduloReporte === 'cc_fleteros'){
+        var pc = new URLSearchParams(); if(desde) pc.set('desde',desde); if(hasta) pc.set('hasta',hasta);
+        var rc = await fetch(base + '/cuenta-corriente-fleteros/movimientos?' + pc.toString(),{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'},cache:'no-store'}); if(!rc.ok) throw new Error('Error '+rc.status);
+        var jc = await rc.json(); list = Array.isArray(jc) ? jc : (jc && Array.isArray(jc.items) ? jc.items : (jc && Array.isArray(jc.data) ? jc.data : []));
+        if(ctx.bucket_inicio){ list = list.filter(function(x){ return String(x.fecha||'').slice(0,10)===ctx.bucket_inicio; }); }
+        cols = ['fecha','tipo','fleteroId','monto','concepto','medio'];
+      } else if(moduloReporte === 'turnos_planilla'){
+        var pt = new URLSearchParams(); if(desde) pt.set('desde',desde); if(hasta) pt.set('hasta',hasta);
+        var rt = await fetch(base + '/turnos/rango?' + pt.toString(),{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'},cache:'no-store'}); if(!rt.ok) throw new Error('Error '+rt.status);
+        var jt = await rt.json(); list = Array.isArray(jt) ? jt : (jt && Array.isArray(jt.items) ? jt.items : (jt && Array.isArray(jt.data) ? jt.data : []));
+        if(ctx.bucket_inicio){ list = list.filter(function(x){ return String(x.fecha||'').slice(0,10)===ctx.bucket_inicio; }); }
+        cols = ['fecha','turno','empleadoId','nombre','estado','horas'];
+      } else if(moduloReporte === 'subproductos'){
+        var ps = new URLSearchParams(); if(desde) ps.set('desde',desde); if(hasta) ps.set('hasta',hasta); if(aserr) ps.set('aserradero',aserr);
+        var rs = await fetch(base + '/conciliacion/subproductos-egresos?' + ps.toString(),{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'},cache:'no-store'}); if(!rs.ok) throw new Error('Error '+rs.status);
+        var js = await rs.json(); list = Array.isArray(js) ? js : (js && Array.isArray(js.items) ? js.items : (js && Array.isArray(js.data) ? js.data : []));
+        if(ctx.bucket_inicio){ list = list.filter(function(x){ return String(x.fecha||'').slice(0,10)===ctx.bucket_inicio; }); }
+        cols = ['fecha','tipo','especieDeclarada','tnEstimadas','tnReales','precioPorTn','aserradero'];
+      } else {
+        return rptRenderFallbackDetalle(ctx);
+      }
+      if(!Array.isArray(list) || list.length===0){ return rptRenderFallbackDetalle(ctx); }
+      var keys = cols ? cols.filter(function(k){ return list.some(function(it){ return it && it[k]!==undefined && it[k]!==null && it[k]!==''; }); }) : Object.keys(list[0]||{});
+      if(!keys.length) keys = Object.keys(list[0]||{}).slice(0,8);
+      var head = keys.map(function(k){ return '<th class="px-3 py-2 text-left whitespace-nowrap">'+rptEsc(rptHumanizeKey(k))+'</th>'; }).join('');
+      var rows = list.slice(0,200).map(function(it){
+        return '<tr class="border-b" style="border-color:var(--ap-border,rgba(232,236,230,.12))">'+keys.map(function(k){ var v=it?it[k]:''; return '<td class="px-3 py-2">'+rptEsc(v==null?'':(typeof v==='object'?JSON.stringify(v):v))+'</td>'; }).join('')+'</tr>';
+      }).join('');
+      body.innerHTML = '<div class="text-xs mb-2" style="color:var(--ap-muted,#93a197)">'+list.length+' registro(s)'+(list.length>200?' (mostrando 200)':'')+' · Filtro por bucket aplicado en cliente cuando corresponde.</div>'+
+        '<div class="overflow-auto"><table class="min-w-full text-xs"><thead><tr style="background:var(--ap-elevated,#243038)">'+head+'</tr></thead><tbody>'+rows+'</tbody></table></div>';
+    }catch(err){
+      rptRenderFallbackDetalle(ctx);
+    }
+  }
+
   function rptRenderPreview(json){
+    _rptLastJson = json || null;
     var table=document.getElementById('rpt-preview-table'); if(!table) return;
     var detalle = (json && Array.isArray(json.detalle)) ? json.detalle : [];
     var totales = (json && json.totales && typeof json.totales==='object') ? json.totales : null;
     var meta = (json && json.meta && typeof json.meta==='object') ? json.meta : {};
     var thead=document.createElement('thead'); var hr=document.createElement('tr');
     var tbody=document.createElement('tbody');
+    var reporteKey = String(meta.reporte || (document.getElementById('rpt-modulo')||{}).value || '');
     if(detalle.length > 0){
       var keys = Object.keys(detalle[0]||{});
       keys.forEach(function(k){ hr.appendChild(rptTh(rptHumanizeKey(k))); });
       thead.appendChild(hr);
-      var drillable = (String(meta.reporte||'') === 'ventas_remitos');
       detalle.forEach(function(row){
         var tr=document.createElement('tr');
-        var isDrill = drillable && row && row.bucket_inicio;
-        tr.className = isDrill ? 'hover:bg-gray-700 cursor-pointer' : 'hover:bg-gray-800';
-        if(isDrill){
-          tr.title = 'Click para ver remitos del período';
-          tr.setAttribute('tabindex','0');
-          tr.setAttribute('role','button');
-          var bi = String(row.bucket_inicio||'').slice(0,10);
-          var bf = rptBucketFin(bi, meta.periodo || 'day');
-          var bl = row.bucket || (bi + ' a ' + bf);
-          var aserr = (row.aserradero != null ? String(row.aserradero) : '');
-          var handler = function(){ rptCargarDetalleBucket(bi, bf, bl, aserr, meta); };
-          tr.addEventListener('click', handler);
-          tr.addEventListener('keydown', function(e){ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); handler(); } });
-        }
+        tr.className = 'hover:bg-gray-700 cursor-pointer';
+        tr.title = 'Click para ver detalle';
+        tr.setAttribute('tabindex','0');
+        tr.setAttribute('role','button');
+        var handler = function(){ rptAbrirDetalle(reporteKey, row, meta); };
+        tr.addEventListener('click', handler);
+        tr.addEventListener('keydown', function(e){ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); handler(); } });
         keys.forEach(function(k){ tr.appendChild(rptTd(row?row[k]:'')); });
         tbody.appendChild(tr);
       });
       rptSetTable(table, thead, tbody); rptMostrarPreview(true);
-      rptMsg('Mostrando ' + detalle.length + ' fila(s) - ' + (meta.reporte||'reporte') + (drillable ? '. Click en una fila para ver remitos.' : '.') );
+      rptMsg('Mostrando ' + detalle.length + ' fila(s) - ' + (reporteKey||'reporte') + '. Click en una fila para ver detalle.');
       return;
     }
     if(totales && Object.keys(totales).length > 0){
       var tkeys = Object.keys(totales);
       tkeys.forEach(function(k){ hr.appendChild(rptTh(rptHumanizeKey(k))); });
       thead.appendChild(hr);
-      var trt=document.createElement('tr'); trt.className='hover:bg-gray-800';
+      var trt=document.createElement('tr'); trt.className='hover:bg-gray-700 cursor-pointer';
+      trt.title = 'Click para ver detalle';
+      trt.setAttribute('tabindex','0'); trt.setAttribute('role','button');
+      var rowT = Object.assign({}, totales);
+      var handlerT = function(){ rptAbrirDetalle(reporteKey, rowT, meta); };
+      trt.addEventListener('click', handlerT);
+      trt.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); handlerT(); } });
       tkeys.forEach(function(k){ trt.appendChild(rptTd(totales[k], true)); });
       tbody.appendChild(trt);
       rptSetTable(table, thead, tbody); rptMostrarPreview(true);
-      rptMsg('Sin detalle en el período; mostrando totales.');
+      rptMsg('Sin detalle en el período; mostrando totales. Click para ver detalle.');
       return;
     }
     rptSetTable(table, null, null); rptMostrarPreview(true);
@@ -11094,7 +11248,7 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
     el.classList.toggle('hidden', !show);
   }
 
-  function rptActualizarCampos(){
+  function rptActualizarCampos(opts){
     var periodo = (document.getElementById('rpt-periodo')||{}).value || 'month';
     var modulo = (document.getElementById('rpt-modulo')||{}).value || '';
     var esTurnos = modulo === 'turnos';
@@ -11123,10 +11277,9 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
     if(hasta){ hasta.required = esSemana; hasta.disabled = !esSemana; }
 
     if(esSemana){
-      // Autocompletar lunes y domingo de la semana actual al seleccionar período semana
       var sem = rptSemanaActual();
-      if(desde) desde.value = sem.desde;
-      if(hasta) hasta.value = sem.hasta;
+      if(desde && !desde.value) desde.value = sem.desde;
+      if(hasta && !hasta.value) hasta.value = sem.hasta;
     }
     if(esMes && mes && !mes.value){
       try{ mes.value = new Date().toISOString().slice(0,7); }catch(e){}
@@ -11134,6 +11287,7 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
     if(esAnio && anio && !anio.value){
       try{ anio.value = String(new Date().getFullYear()); }catch(e){}
     }
+    if(!(opts && opts.skipAuto)) rptSchedulePreview(0);
   }
 
   function rptBuildParams(format){
@@ -11173,32 +11327,63 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
     return { modulo: modulo, params: params, periodo: periodo, fecha: params.get('fecha') || fecha || mes || desde };
   }
 
-  window.rptPrevisualizarJson = async function(ev){
-    if(ev && ev.preventDefault) ev.preventDefault();
+  async function rptCargarPreview(opts){
     var built = rptBuildParams('json');
     if(built.error){ rptMsg(built.error, true); return; }
     var token = localStorage.getItem('token') || (typeof getToken==='function' ? getToken() : '') || '';
     if(!token){ rptMsg('Sesión no disponible. Volvé a iniciar sesión.', true); return; }
+    var seq = ++_rptReqSeq;
     var base = (typeof API_URL!=='undefined' && API_URL) ? API_URL : '';
     var url = base + '/reportes/' + encodeURIComponent(built.modulo) + '?' + built.params.toString();
-    var btn = document.getElementById('rpt-btn-ver');
     try{
-      if(btn){ btn.disabled=true; btn.setAttribute('aria-busy','true'); btn.textContent='Cargando...'; }
       rptMsg('Consultando reporte...');
       var res = await fetch(url, { method:'GET', headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' }, cache:'no-store' });
+      if(seq !== _rptReqSeq) return;
       if(!res.ok){
         var msg = 'Error ' + res.status;
         try{ var j = await res.json(); msg = (j && (j.message||j.error)) ? (Array.isArray(j.message)?j.message.join(', '):j.message) : msg; }catch(e){}
         throw new Error(msg);
       }
       var json = await res.json();
+      if(seq !== _rptReqSeq) return;
       rptRenderPreview(json||{});
     }catch(err){
+      if(seq !== _rptReqSeq) return;
       window.rptLimpiarPreview();
       rptMsg('No se pudo cargar la vista previa: ' + ((err&&err.message)||err), true);
-    }finally{
-      if(btn){ btn.disabled=false; btn.removeAttribute('aria-busy'); btn.textContent='Ver en Pantalla'; }
     }
+  }
+
+  function rptSchedulePreview(delay){
+    if(_rptDebounceTimer) clearTimeout(_rptDebounceTimer);
+    var d = (typeof delay === 'number') ? delay : 300;
+    _rptDebounceTimer = setTimeout(function(){ rptCargarPreview(); }, d);
+  }
+
+  window.rptCargarPreview = rptCargarPreview;
+  window.rptSchedulePreview = rptSchedulePreview;
+  window.rptPrevisualizarJson = function(ev){ if(ev&&ev.preventDefault) ev.preventDefault(); if(_rptDebounceTimer) clearTimeout(_rptDebounceTimer); rptCargarPreview(); };
+
+  function rptBindAutoRefresh(){
+    var ids = ['rpt-modulo','rpt-periodo','rpt-fecha','rpt-mes','rpt-anio','rpt-desde','rpt-hasta','rpt-turno'];
+    ids.forEach(function(id){
+      var el=document.getElementById(id); if(!el || el._rptBound) return; el._rptBound = true;
+      var deb = (el.tagName === 'INPUT' && (el.type==='date' || el.type==='month' || el.type==='number'));
+      el.addEventListener('change', function(){
+        if(id==='rpt-modulo' || id==='rpt-periodo'){ rptActualizarCampos({skipAuto:true}); rptSchedulePreview(0); }
+        else { rptSchedulePreview(0); }
+      });
+      el.addEventListener('input', function(){
+        if(id==='rpt-modulo' || id==='rpt-periodo'){ rptActualizarCampos({skipAuto:true}); }
+        rptSchedulePreview(deb ? 300 : 0);
+      });
+    });
+  }
+
+  window.rptAlEntrarVista = function(){
+    try{ rptActualizarCampos({skipAuto:true}); }catch(e){}
+    rptBindAutoRefresh();
+    rptSchedulePreview(0);
   };
 
   function rptInit(){
@@ -11208,12 +11393,8 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
     if(m && !m.value){ try{ m.value=new Date().toISOString().slice(0,7); }catch(e){} }
     var a=document.getElementById('rpt-anio');
     if(a && !a.value){ try{ a.value=String(new Date().getFullYear()); }catch(e){} }
-    var periodoSel=document.getElementById('rpt-periodo');
-    var moduloSel=document.getElementById('rpt-modulo');
-    if(periodoSel){ periodoSel.addEventListener('change', rptActualizarCampos); }
-    if(moduloSel){ moduloSel.addEventListener('change', rptActualizarCampos); }
-    rptActualizarCampos();
-    // Admin UX: ocultar tab si no es admin (BE es fuente de verdad; 401/403 se muestran)
+    rptBindAutoRefresh();
+    rptActualizarCampos({skipAuto:true});
     try{
       var rol=localStorage.getItem('rol');
       var esAdmin = (rol==='admin' || (typeof esAdministradorGeneral==='function' && esAdministradorGeneral()));
@@ -11254,6 +11435,99 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
       rptMsg('No se pudo descargar: ' + ((err&&err.message)||err), true);
     }finally{
       if(btn){ btn.disabled=false; btn.textContent='Descargar Reporte (CSV)'; }
+    }
+  };
+
+  function rptRenderDetalleTabla(detalle, totales){
+    var det = Array.isArray(detalle) ? detalle : [];
+    if(det.length){
+      var keys = Object.keys(det[0]||{});
+      var head = keys.map(function(k){ return '<th>'+rptEsc(rptHumanizeKey(k))+'</th>'; }).join('');
+      var rows = det.slice(0,300).map(function(r){ return '<tr>'+keys.map(function(k){ var v=r?r[k]:''; return '<td>'+rptEsc(v==null?'':(typeof v==='object'?JSON.stringify(v):v))+'</td>'; }).join('')+'</tr>'; }).join('');
+      return '<div style="overflow:auto"><table class="rpt-print-table"><thead><tr>'+head+'</tr></thead><tbody>'+rows+'</tbody></table></div>'+(det.length>300?'<div style="font-size:10px;color:#555;margin-top:4px">Mostrando 300 de '+det.length+' filas.</div>':'');
+    }
+    if(totales && typeof totales==='object' && Object.keys(totales).length){
+      var tk = Object.keys(totales);
+      var h2 = tk.map(function(k){ return '<th>'+rptEsc(rptHumanizeKey(k))+'</th>'; }).join('');
+      var r2 = '<tr>'+tk.map(function(k){ return '<td>'+rptEsc(totales[k])+'</td>'; }).join('')+'</tr>';
+      return '<div style="overflow:auto"><table class="rpt-print-table"><thead><tr>'+h2+'</tr></thead><tbody>'+r2+'</tbody></table></div><div style="font-size:10px;color:#555;margin-top:4px">Totales (sin detalle).</div>';
+    }
+    return '<div style="font-size:11px;color:#555">Sin datos para este módulo/período.</div>';
+  }
+
+  function rptYield(fn){ if(window.requestAnimationFrame){ requestAnimationFrame(function(){ setTimeout(fn,0); }); } else { setTimeout(fn,0); } }
+
+  window.rptImprimirReporteCompleto = async function(ev){
+    if(ev && ev.preventDefault) ev.preventDefault();
+    var built = rptBuildParams('json');
+    if(built.error){ rptMsg(built.error, true); return; }
+    var modulos = [
+      {id:'produccion', label:'Producción'},
+      {id:'ventas', label:'Ventas'},
+      {id:'gastos', label:'Gastos'},
+      {id:'rollos', label:'Rollos'},
+      {id:'fleteros', label:'Fleteros (CC)'},
+      {id:'rrhh-partes', label:'RRHH Partes'},
+      {id:'turnos', label:'Turnos (Planilla)'},
+      {id:'subproductos', label:'Subproductos'},
+      {id:'pallets', label:'Pallets'}
+    ];
+    var root = document.getElementById('rpt-print-root');
+    var btn = document.getElementById('rpt-btn-imprimir');
+    if(!root){ rptMsg('No se encontró contenedor de impresión.', true); return; }
+    var periodo = (document.getElementById('rpt-periodo')||{}).value || built.periodo || '';
+    var rangoTxt = (built.params && (built.params.get('desde')||built.params.get('fecha')||'')) || '';
+    try{
+      if(btn){ btn.disabled=true; btn.textContent='Generando...'; }
+      rptSetProgress(true, 'Generando sección 0 de 9...');
+      root.innerHTML = '';
+      var results = [];
+      for(var i=0;i<modulos.length;i+=3){
+        var chunk = modulos.slice(i,i+3);
+        rptSetProgress(true, 'Generando sección ' + (i+1) + ' de ' + modulos.length + '...');
+        var promises = chunk.map(function(m){
+          var p = new URLSearchParams(built.params.toString()); p.set('format','json');
+          return rptFetchJsonPorParams(m.id, p).then(function(json){ return {m:m, ok:true, json:json}; }).catch(function(err){ return {m:m, ok:false, error:(err&&err.message)||String(err)}; });
+        });
+        var settled = await Promise.allSettled(promises);
+        settled.forEach(function(r){ if(r.status==='fulfilled') results.push(r.value); else results.push({m:{id:'?',label:'?'}, ok:false, error:'Error inesperado'}); });
+      }
+      var idx = 0;
+      var header = '<div class="rpt-print-cover"><h1 style="margin:0 0 4px 0;font-size:20px;">Reporte completo — Aserradero</h1>'+
+        '<div style="font-size:12px;color:#333">Período: <strong>'+rptEsc(periodo)+'</strong> · Referencia/rango: <strong>'+rptEsc(rangoTxt+(built.params.get('hasta')?(' a '+built.params.get('hasta')):''))+'</strong></div>'+
+        '<div style="font-size:11px;color:#555">Generado: '+rptEsc(new Date().toLocaleString('es-AR'))+' · Módulos: 9</div></div>';
+      root.innerHTML = header;
+      await new Promise(function(resolve){
+        function step(){
+          if(idx >= results.length){ resolve(); return; }
+          var r = results[idx];
+          rptSetProgress(true, 'Generando sección ' + (idx+1) + ' de ' + modulos.length + '...');
+          var sec = document.createElement('section');
+          sec.className = 'rpt-print-section';
+          var title = '<h2 style="font-size:15px;margin:12px 0 6px 0;border-bottom:1px solid #ddd;padding-bottom:3px">'+rptEsc((r.m&&r.m.label)||'Módulo')+'</h2>';
+          if(r.ok){
+            var meta = (r.json && r.json.meta) || {};
+            var rango = meta.rango ? ((meta.rango.desde||'') + ' a ' + (meta.rango.hasta||'')) : '';
+            var metaHtml = '<div style="font-size:10px;color:#555;margin-bottom:4px">Rango: '+rptEsc(rango||'—')+'</div>';
+            sec.innerHTML = title + metaHtml + rptRenderDetalleTabla(r.json && r.json.detalle, r.json && r.json.totales);
+          } else {
+            sec.innerHTML = title + '<div style="font-size:11px;color:#b91c1c">No se pudo obtener este módulo: '+rptEsc(r.error||'error')+'</div>';
+          }
+          root.appendChild(sec);
+          idx++;
+          rptYield(step);
+        }
+        rptYield(step);
+      });
+      rptSetProgress(false);
+      root.classList.remove('hidden');
+      rptMsg('Reporte completo generado (9 módulos). Abriendo impresión...');
+      setTimeout(function(){ try{ window.print(); }catch(e){} }, 150);
+    }catch(err){
+      rptSetProgress(false);
+      rptMsg('No se pudo generar el reporte completo: ' + ((err&&err.message)||err), true);
+    }finally{
+      if(btn){ btn.disabled=false; btn.textContent='Imprimir reporte completo'; }
     }
   };
 
