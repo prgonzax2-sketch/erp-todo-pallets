@@ -32,21 +32,20 @@ Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 Name: "desktopicon"; Description: "Crear acceso directo en el Escritorio"; GroupDescription: "Accesos directos:"; Flags: unchecked
 
 [Files]
-; Empaquetar artefactos de despliegue y helper interno
+; Empaquetar artefactos de despliegue y helpers internos
 Source: "..\docker-compose.prod.yml"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\.env.example"; DestDir: "{app}"; Flags: ignoreversion
 Source: "bootstrap.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "actualizar.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-; Acceso directo en Escritorio al sistema local (común a todos los usuarios)
-Name: "{commondesktop}\Sistema Aserradero ERP"; Filename: "{#MyAppURL}"; Tasks: desktopicon
-; Acceso directo adicional en menú inicio (opcional, útil)
-Name: "{group}\Sistema Aserradero ERP"; Filename: "{#MyAppURL}"
+Name: "{commondesktop}\Sistema Aserradero ERP"; Filename: "http://localhost:PORT_PLACEHOLDER"; Tasks: desktopicon
+Name: "{group}\Sistema Aserradero ERP"; Filename: "http://localhost:PORT_PLACEHOLDER"
+Name: "{group}\Actualizar Sistema Aserradero ERP"; Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\actualizar.ps1"""; WorkingDir: "{app}"
 
 [Run]
-; Ejecutar bootstrap.ps1 de forma oculta (runhidden) tras copiar archivos
 Filename: "powershell.exe"; \
-  Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\bootstrap.ps1"""; \
+  Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\bootstrap.ps1"" -DesktopShortcut ""{commondesktop}\Sistema Aserradero ERP.url"" -GroupShortcut ""{group}\Sistema Aserradero ERP.url"""; \
   WorkingDir: "{app}"; \
   Flags: runhidden waituntilterminated; \
   StatusMsg: "Configurando Docker, entorno y servicios (puede tardar varios minutos)..."
@@ -58,8 +57,9 @@ Filename: "powershell.exe"; \
 ; Type: filesandordirs; Name: "{app}\license" ; (omitido intencionalmente)
 ; Type: files; Name: "{app}\.env"             ; (omitido intencionalmente)
 Type: files; Name: "{app}\bootstrap.log"
+Type: files; Name: "{app}\actualizar.log"
 
 [Code]
 // Notas:
-// - Requiere Docker Desktop instalado y activo en el equipo cliente.
-// - bootstrap.ps1 genera .env (credenciales) y ejecuta docker compose up -d.
+// - bootstrap.ps1: instala/inicia Docker Desktop si es necesario, genera .env, levanta el stack (sin credenciales embebidas; la imagen debe ser accesible/pública o proveerse offline).
+// - actualizar.ps1: permite descargar y aplicar actualizaciones de la imagen configurada en docker-compose.prod.yml.
