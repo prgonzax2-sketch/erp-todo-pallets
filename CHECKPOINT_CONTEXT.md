@@ -2,7 +2,20 @@
 
 > Estado operativo resumido. Memoria vigente: `MEMORY.md`. Instrucciones: `AGENTS.md`. Actualizado: **2026-11-12 (SDD Reportes T1-T4 + instalador offline/devops, rama `feature/agente-licencia-activacion-ui`, push solicitado)**. Sistema **estable** (dev `:3000`, `TYPEORM_SYNCHRONIZE=true` en runtime dev).
 
-## Sesión 2026-11-12 (cont.) — Reportes UX (SDD T1-T4) + artefactos instalador offline / GHCR
+## Sesión 2026-11-12/13 (cont.2) — Reportes: quitar Turnos, agregar Empleados (resumen completo), quitar Bucket, fixes + DevTools (SDD)
+
+**Rama:** `feature/agente-licencia-activacion-ui` (local, cambios sin commit al momento de este handoff). **SDD:** `specs/reportes-empleados-ajustes/{spec,plan,tasks}.md`.
+
+- **BE (`src/reportes`)**: eliminado `bucket`/`bucket_inicio` de **todos** los módulos. Reemplazado `GET /reportes/turnos` por `GET /reportes/empleados` (DTO sin `turno`).
+  - **Fix 500 (2026-11-13):** consultas contra `vw_rpt_*` corregidas para usar `v.fecha_d`/columnas calificadas (las vistas ya exponen `fecha_d`; se eliminó subselect duplicado que causaba `column reference "fecha_d" is ambiguous` en ventas/gastos/rollos/fleteros/rrhh-partes/subproductos/pallets/pedidos).
+  - **Empleados (resumen completo, planilla):** agregado desde `turnos_borradores` JOIN `empleados` por rango + `adelantos` (montoEntregado en período). Semántica correcta: `precio/pres` son tarifas → `monto_horas = SUM(hs*precio)`, `monto_presentismo = SUM(hs*pres)`, `subtotal_planilla = monto_horas + monto_presentismo`; tareas/extras como cantidades (`pallets, limpiezas, descargas, cargas`); `adelantos_periodo`, `neto_estimado = subtotal_planilla - adelantos_periodo`. Columnas: `aserradero, empleado_id, empleado, registros, dias_trabajados, hs_trabajadas, monto_horas, monto_presentismo, pallets, limpiezas, descargas, cargas, subtotal_planilla, adelantos_periodo, neto_estimado`. Meta documenta alcance (no incluye pagos por tareas/bonos sin tarifas persistidas).
+- **FE (`index.html`)**: selector Empleados (sin Turnos), sin filtro turno, impresión consolidada incluye `empleados`, sin bucket en preview/drill-down/impresión. Drill-down rango-based: ventas por rango `/salidas-stock`; **RRHH Partes** intenta `/partes-diarios` filtrado por rango/empleado/aserradero (fallback si no hay registros); empleados/producción/pallets sin detalle listado → fallback.
+  - **Fix UI (2026-11-13):** declarados `_rptReqSeq` y `_rptDebounceTimer` (faltaban) → auto-preview/cambio de módulo vuelve a cargar la vista previa correctamente (ya no queda “solo Reporte completo”).
+- **Verificación (DevTools MCP, admin, `http://localhost:3000`, mes 2026-11):** 10 endpoints reportes **200**. Cambio de módulos actualiza preview en todos; sin columnas bucket. **Empleados 25 filas** con resumen correcto (ej. Pedro Gonzalez: adelantos 157921, neto 934079; Zaracho: 150 pallets, subtotal/neto correctos). Drill-downs OK (Empleados/RRHH sin registros → fallback; Ventas → remitos por rango). RRHH Partes en este entorno sin `partes_diarios` (fallback esperado; mostrará registros cuando existan). Impresión consolidada **9 módulos** OK. Consola sin errores nuevos, 390×844 OK. `npm run build` y `docker-compose up -d --build app` **OK** (reiterados).
+
+---
+
+## Sesión 2026-11-12 (cont.) — Reportes UX (SDD T1-T4, finalizado) + artefactos instalador offline / GHCR + APP_PORT dinámico (finalizado)
 
 **Rama:** `feature/agente-licencia-activacion-ui` (local). **Commits nuevos (sin merge):** `1faf48a` `docs(reportes): SDD T0/T1 spec-plan-tasks con D-A/D-B/D-C y matriz`, `1223a41` `feat(reportes): T2 auto-preview, T3 drill-down modal universal y T4 impresion consolidada (D-A/D-B/D-C)`, `2cd1c46` `chore(devops): endurecer ignores, workflow GHCR por tag y script offline images`, `757cd29` `chore(installer): script PowerShell de carga offline de imagenes con espera de Docker` (amend con inicio interactivo opcional `docker compose up -d`).
 
@@ -13,10 +26,14 @@
 - **T4 (D-C):** botón dedicado “Imprimir reporte completo”, fetch de 9 módulos en **lotes de 3** (`Promise.allSettled`), **render diferido** por módulo (RAF/`setTimeout(0)`), progreso UI “Generando sección X de 9…”, consolidado en `#rpt-print-root` e impresión vía `@media print` + `window.print()` (errores parciales tolerados).
 - **Verificación:** `npm run build` **OK** (exit 0). `index.html` **UTF-8 sin BOM**. DevTools MCP interactivo no ejecutado en esta sesión (recomendado smoke read-only admin en `:3000`: auto-preview, modal/fallback por módulo, impresión, CSV, consola, 390×844).
 
-### Instalador offline / devops
+### Reportes — finalización (T1-T4, SDD `specs/reportes-ux-detalle-impresion/`)
+- **Finalizado:** auto-preview al entrar/cambiar filtros (debounce ~300ms, cancelación por token de secuencia, sin `#rpt-btn-ver`, CSV preservado), drill-down en modal para todos los módulos (fallback visual estático sin inventar registros ni cambios BE donde no hay detalle listado/viable), e impresión consolidada de 9 módulos (lotes de 3 `Promise.allSettled`, render diferido RAF/`setTimeout(0)`, progreso UI “Generando sección X de 9”, `@media print` + `window.print()`, errores parciales tolerados). Verificación: `npm run build` OK, UTF-8 sin BOM.
+
+### Instalador offline / devops (APP_PORT dinámico, finalizado)
 - **Ignores endurecidos (ERP y Auth, audit):** exclusión estricta de `.env`/`.env.*` (con `!.env.example` donde aplica), `LICENSE_PUBLIC_KEY_PEM` y material criptográfico local (`*.pem/*.key/*.p12/*.pfx/*.jks/*.keystore/*.jwk/*.asc/*.gpg`, `id_rsa*`, `id_ed25519*`, `*.der/*.cer/*.crt/*.csr`, `*.secrets.*`, `secrets.local.*`, `license/`). ERP: `.gitignore`/`.dockerignore`; Auth (`C:\Users\Noxi-PC\sistema-aserradero-auth`): `.gitignore`/`.dockerignore` endurecidos en disco (repo separado, **no** incluidos en commit ERP; `private.pem/public.pem` locales quedan ignorados, no commiteados).
 - **GHCR:** `.github/workflows/docker-publish.yml` (ERP) — build & push a GHCR en tags `v*` (`docker/metadata-action`, `build-push-action`, `GITHUB_TOKEN` packages:write).
 - **Offline:** `build-offline-images.bat` (build ERP+Auth y `docker save` a `.tar` en `dist-installer\images`, `VERSION_TAG`/`AUTH_CONTEXT` configurables). `dist-installer/load-offline-images.ps1` (espera demonio Docker `docker info` con reintentos 5s, timeout 5min; `docker load -i` de `*.tar`; toda salida a `docker-load.log` via `Start-Transcript`; prompt interactivo post-carga para `docker compose up -d` si existe `docker-compose.yml` en raíz, o aviso de configurar `.env`/arranque manual).
+- **Inyección dinámica de `APP_PORT` (accesos directos, finalizado):** acceso directo creado con placeholder `PORT_PLACEHOLDER` en `[Icons]` (Inno Setup `deploy/windows-installer/setup.iss`) y `bootstrap.ps1` lee `APP_PORT` desde `.env` para parchear/reemplazar el puerto del acceso directo al valor configurado (instalador offline, commit `e094dbc`).
 
 ### Estado git/push
 - `.env` local **existe** y está **ignorado** (`git check-ignore -v .env` → `.gitignore:39:.env`). **Working tree no limpio** por cambios/untracked preexistentes ajenos a esta sesión (p.ej. `M deploy/docker-compose.prod.yml`, `M deploy/windows-installer/bootstrap.ps1`, múltiples `??` specs/src/docs/scripts/config legados/untracked) — **no commiteados**. Push solicitado por usuario a ejecutar sobre commits de esta rama.
@@ -279,3 +296,23 @@
 - **B7:** mitigado (lógica 3 renders `#db-gastos-body` sincronizada; light 8842/16333, dark 17001). Unificación diferida a refactor mayor SDD (riesgo en `index.html` duplicado/shadow).
 - **UX:** validación DevTools automatizada (jerarquía Aserradero→Área, config admin, preview totales, filtros, sin overflow reportado, consola sin errores nuevos). Recomendado: click-through humano + 390×844 dispositivo/viewport real.
 - **Datos `TEST SDD*`:** gastos 2-7 anulados (motivo limpieza dev), catálogos soft-deactivados; dashboard `gastosGenerales` CONFIRMADO = 0. `npm run build` OK, Vitest 6/39 PASS, Docker rebuild+restart OK. **Sin commits.**
+
+## Sesion 2026-11-14 - Contrato remoto licenciamiento (Pilar 1 + SDD ERP)
+- Rama: feature/agente-licencia-activacion-ui (sin commit). SDD: specs/licensing-remote-contract/ actualizado.
+- Pilar 1 acepto contrato (pull, inalcanzable!=revocado). kid/PEM prod-20261111 confirmados; URL publica oficial y SLA pendientes. ERP pin PEM estatico.
+- .env.example: LICENSE_SERVER_URL=http://host.docker.internal:3001 (solo prueba local). Pendientes: T1-T7.
+
+## Sesion 2026-11-14 (cont.) - Avance Pilar 1 (Auth)
+- Pilar 1 (sistema-aserradero-auth) cerro handoff/documentacion operativa en su repo (docs/operations.md, MEMORY, CHECKPOINT): paquete listo (URL placeholder, kid/PEM, API_ISSUER, intervalo 15-60 min, rotacion/solapamiento) sin cambios de codigo. Bloqueantes: P1-A URL HTTPS oficial accesible, SLA/estrategia rotacion conjunta, E2E remoto. T1-T7 ERP a ejecutar cuando haya URL/SLA oficiales.
+
+## Sesion 2026-11-14 (cont.2) - Implementacion T3/T4/T5 parcial (ERP)
+- Rama: feature/agente-licencia-activacion-ui (sin commit). Cambios: src/licensing/licensing.service.ts (formatVerifyError, diagnostico red/DNS/timeout/TLS en verifyNow preservando estado previo), deploy/windows-installer/bootstrap.ps1 (WARN no bloqueante si LICENSE_SERVER_URL vacio o local), docs/licenciamiento.md y docs/windows-packaging.md (contrato remoto, pull/proxima verificacion, inalcanzable!=revocado, prerequisitos, rotacion PEM pin estatico kid prod-20261111, URL/SLA TBD). SDD tasks: T3[x], T4[x], T5[~].
+- Verificacion: npm run build OK; npx vitest run src/licensing/licensing.service.spec.ts -> 14/14 PASS. Sin ejecucion bootstrap en limpio ni recompilacion instalador (T6). Pendientes: T1/T2 (URL oficial/SLA), T6, T7.
+
+## Sesion 2026-11-14 (cont.3) - Autorizacion A y B: paquete definitivo parcial (ERP)
+- Rama: feature/agente-licencia-activacion-ui (sin commit). Autorizado A y B con URL/API_ISSUER pendientes de valor real. Creado specs/licensing-remote-contract/paquete-definitivo.template.env. Integrado intervalo SLA indicado 1800000 ms y refs kid/PEM confirmados en .env.example, deploy/docker-compose.prod.yml, docs/licenciamiento.md, docs/windows-packaging.md; LICENSE_SERVER_URL mantiene valor local de prueba hasta ingreso oficial. SDD: T1[~], T2[~], T5[~].
+- Verificacion: npm run build OK; npx vitest run src/licensing/licensing.service.spec.ts -> 14/14 PASS. Sin commits/push/merge.
+
+## Sesion 2026-11-14 (turnkey) - Setup wizard, tunel cloudflared y operacion remota
+- Rama: feature/agente-licencia-actualizacion-ui. Implementado: InstallationModule (/installation/setup-status, /installation/setup-admin solo sin admin), CORS dinamico con origen de tunel (LICENSE_STATE_PATH/tunnel_url.txt), SPA /setup + wizard primera configuracion (URL publica/local, copiar, crear admin+login) y bloque URL tunel en Suscripcion; bootstrap.ps1 integra cloudflared quick tunnel (descarga, helper start-tunnel.ps1, tarea ONLOGON, persistencia URL, apertura /?setup=1). Specs: specs/turnkey-setup-tunnel/.
+- Verificacion: npm run build OK; vitest src/licensing/licensing.service.spec.ts 14/14 PASS. Sin push. Auth intermitente: verifyNow preserva estado previo en fallo y evaluateAccess permite vigencia/gracia -> autonomia offline y sync por pull al reconectar.

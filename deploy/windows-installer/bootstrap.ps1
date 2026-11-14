@@ -312,9 +312,156 @@ try {
         }
     }
 
-    Write-Log "Instalación completada. Acceso: http://localhost:$appPort"
+    # 6) Túnel remoto gratuito (cloudflared Quick Tunnel) para sucursales/remoto
+    # - Sin cuenta ni apertura de puertos. URL efímera https://*.trycloudflare.com apuntando a localhost:$appPort
+    # - Persiste URL activa en license\tunnel_url.txt (visible para backend/UI)
+    try {
+        $toolsDir = Join-Path $AppDir 'tools'
+        $cfDir = Join-Path $toolsDir 'cloudflared'
+        $cfExe = Join-Path $cfDir 'cloudflared.exe'
+        $licenseDir = Join-Path $AppDir 'license'
+        $tunnelUrlFile = Join-Path $licenseDir 'tunnel_url.txt'
+        $tunnelLog = Join-Path $AppDir 'cloudflared.log'
+        $tunnelHelper = Join-Path $AppDir 'start-tunnel.ps1'
+        if (-not (Test-Path $cfDir)) { New-Item -ItemType Directory -Path $cfDir -Force | Out-Null }
+
+        # Helper: inicia/reinicia cloudflared Quick Tunnel y captura URL pública (usado por bootstrap y tarea programada)
+        $helperContent = @'
+param([string]$AppDirParam = "", [int]$PortParam = 0)
+$ErrorActionPreference = "Continue"
+try {
+  if ([string]::IsNullOrWhiteSpace($AppDirParam)) { $AppDirParam = Split-Path -Parent $MyInvocation.MyCommand.Path }
+  $appDir = $AppDirParam
+  $cfExe = Join-Path $appDir "tools\cloudflared\cloudflared.exe"
+  $licenseDir = Join-Path $appDir "license"
+  $tunnelUrlFile = Join-Path $licenseDir "tunnel_url.txt"
+  $tunnelLog = Join-Path $appDir "cloudflared.log"
+  if (-not (Test-Path $licenseDir)) { New-Item -ItemType Directory -Path $licenseDir -Force | Out-Null }
+  if ($PortParam -le 0) {
+    $envFile = Join-Path $appDir ".env"
+    if (Test-Path $envFile) {
+      $m = Select-String -Path $envFile -Pattern "^APP_PORT\s*=\s*['`"]?(.*?)['`"]?\s*(?:#.*)?$" -ErrorAction SilentlyContinue
+      if ($m) { $p = $m.Matches.Groups[1].Value.Trim(); if ($p -match "^\d+$") { $PortParam = [int]$p } }
+    }
+    if ($PortParam -le 0) { $PortParam = 3000 }
+  }
+  if (-not (Test-Path $cfExe)) { Add-Content -Path $tunnelLog -Value "[$(Get-Date -Format s)] cloudflared.exe no encontrado." -Encoding UTF8; exit 1 }
+  # Detener instancias previas de cloudflared lanzadas para este túnel rápido
+  try { Get-Process cloudflared -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue } catch { }
+  Start-Sleep -Milliseconds 500
+  try { Remove-Item $tunnelUrlFile -Force -ErrorAction SilentlyContinue } catch { }
+  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  $psi.FileName = $cfExe
+  $psi.Arguments = "tunnel --url http://localhost:$PortParam --no-autoupdate"
+  $psi.UseShellExecute = $false
+  $psi.RedirectStandardOutput = $true
+  $psi.RedirectStandardError = $true
+  $psi.CreateNoWindow = $true
+  $proc = New-Object System.Diagnostics.Process
+  $proc.StartInfo = $psi
+  $null = $proc.Start()
+  Add-Content -Path $tunnelLog -Value "[$(Get-Date -Format s)] Iniciando cloudflared quick tunnel -> http://localhost:$PortParam (PID $($proc.Id))" -Encoding UTF8
+  $found = $false
+  $deadline = (Get-Date).AddSeconds(60)
+  while (-not $proc.HasExited -and (Get-Date) -lt $deadline -and -not $found) {
+    foreach ($stream in @($proc.StandardOutput, $proc.StandardError)) {
+      while (-not $found -and -not $stream.EndOfStream) {
+        $line = $stream.ReadLine()
+        if ($null -ne $line) {
+          Add-Content -Path $tunnelLog -Value $line -Encoding UTF8
+          if (-not $found -and $line -match 'https://[a-z0-9-]+\.trycloudflare\.com') {
+            $url = $Matches[0]
+            Set-Content -Path $tunnelUrlFile -Value $url -Encoding ASCII
+            Add-Content -Path $tunnelLog -Value "[$(Get-Date -Format s)] URL publica detectada: $url" -Encoding UTF8
+            $found = $true
+          }
+        }
+      }
+    }
+    if (-not $found) { Start-Sleep -Milliseconds 300 }
+  }
+  if (-not $found) { Add-Content -Path $tunnelLog -Value "[$(Get-Date -Format s)] No se detecto URL publica en 60s (cloudflared sigue en ejecucion)." -Encoding UTF8 }
+  # Mantener drenando salida para que el proceso no bloquee; si se invoca desde tarea, el proceso queda vivo
+  while (-not $proc.HasExited) {
+    try {
+      $lo = $proc.StandardOutput.ReadLine(); if ($null -ne $lo) { Add-Content -Path $tunnelLog -Value $lo -Encoding UTF8 }
+      $le = $proc.StandardError.ReadLine(); if ($null -ne $le) { Add-Content -Path $tunnelLog -Value $le -Encoding UTF8 }
+      if ($null -eq $lo -and $null -eq $le) { Start-Sleep -Milliseconds 500 }
+    } catch { Start-Sleep -Milliseconds 500 }
+  }
+} catch {
+  try { Add-Content -Path (Join-Path $AppDirParam "cloudflared.log") -Value "[$(Get-Date -Format s)] Error túnel: $($_.Exception.Message)" -Encoding UTF8 } catch { }
+  exit 1
+}
+'@
+        Set-Content -Path $tunnelHelper -Value $helperContent -Encoding UTF8
+        Write-Log "Helper de túnel actualizado: $tunnelHelper"
+
+        if (-not (Test-Path $cfExe)) {
+            Write-Log "Descargando cloudflared (Quick Tunnel gratuito)..."
+            try {
+                [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+                $cfUrl = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
+                Invoke-WebRequest -Uri $cfUrl -OutFile $cfExe -UseBasicParsing
+                Write-Log "cloudflared descargado en $cfExe"
+            } catch {
+                Write-Log "No se pudo descargar cloudflared (el acceso remoto por túnel no quedará activo automáticamente): $($_.Exception.Message)" 'WARN'
+            }
+        } else {
+            Write-Log "cloudflared ya presente: $cfExe"
+        }
+
+        # Registrar tarea programada para arranque automático (Windows) y refresco de URL al reiniciar
+        if (Test-Path $cfExe) {
+            try {
+                $taskName = "SistemaAserraderoERPTunnel"
+                $taskAction = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$tunnelHelper`" -AppDirParam `"$AppDir`""
+                & schtasks /Create /TN $taskName /SC ONLOGON /RL HIGHEST /F /TR $taskAction *> $null
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Log "Tarea programada de túnel creada/actualizada: $taskName (ONLOGON)."
+                } else {
+                    Write-Log "No se pudo crear la tarea programada del túnel (código $LASTEXITCODE)." 'WARN'
+                }
+            } catch {
+                Write-Log "No se pudo registrar autoarranque del túnel: $($_.Exception.Message)" 'WARN'
+            }
+
+            # Iniciar túnel ahora (best-effort) para obtener URL pública inicial
+            try {
+                Write-Log "Iniciando túnel cloudflared (Quick Tunnel) hacia http://localhost:$appPort ..."
+                Start-Process -FilePath "powershell.exe" -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File',$tunnelHelper,'-AppDirParam',$AppDir,'-PortParam',[string]$appPort) -WindowStyle Hidden | Out-Null
+                # Espera breve para que se genere la URL y quede en license\tunnel_url.txt
+                $waitTunnel = 0
+                while ($waitTunnel -lt 30 -and -not (Test-Path $tunnelUrlFile)) { Start-Sleep -Seconds 2; $waitTunnel += 2 }
+                if (Test-Path $tunnelUrlFile) {
+                    $pub = (Get-Content $tunnelUrlFile -Raw -ErrorAction SilentlyContinue).Trim()
+                    if ($pub) { Write-Log "URL pública del túnel: $pub" }
+                } else {
+                    Write-Log "URL pública del túnel aún no disponible (puede demorar). Se actualizará automáticamente." 'WARN'
+                }
+            } catch {
+                Write-Log "No se pudo iniciar el túnel automáticamente: $($_.Exception.Message)" 'WARN'
+            }
+        } else {
+            Write-Log "Túnel cloudflared no configurado (ejecutable no disponible)." 'WARN'
+        }
+    } catch {
+        Write-Log "Error configurando túnel cloudflared: $($_.Exception.Message)" 'WARN'
+    }
+
+    # 7) Abrir asistente de primera configuración (setup wizard)
+    try {
+        $setupUrl = "http://localhost:$appPort/?setup=1"
+        Write-Log "Abriendo asistente de primera configuración: $setupUrl"
+        Start-Process $setupUrl | Out-Null
+    } catch {
+        Write-Log "No se pudo abrir el navegador automáticamente: $($_.Exception.Message)" 'WARN'
+    }
+
+    Write-Log "Instalación completada. Acceso local: http://localhost:$appPort"
     Write-Host ""
-    Write-Host "Sistema Aserradero ERP instalado. Abra: http://localhost:$appPort" -ForegroundColor Green
+    Write-Host "Sistema Aserradero ERP instalado. Acceso local: http://localhost:$appPort" -ForegroundColor Green
+    Write-Host "Si corresponde, complete la primera configuración en el asistente (administrador y dirección web pública)." -ForegroundColor Green
     exit 0
 }
 catch {

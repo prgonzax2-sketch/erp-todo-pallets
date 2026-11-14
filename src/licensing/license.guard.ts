@@ -35,12 +35,14 @@ export class LicenseGuard implements CanActivate {
   }
 
   private isWhitelisted(path: string): boolean {
-    // Recursos/health/auth/licensing/activación y estáticos necesarios
+    // Recursos/health/auth/licensing/activación/setup y estáticos necesarios
     if (path === '/' || path === '') return true;
     if (path === '/index.html' || path === '/styles.css' || path === '/favicon.ico') return true;
     if (path === '/activacion' || path.startsWith('/activacion/')) return true;
+    if (path === '/setup' || path.startsWith('/setup/')) return true;
     if (path === '/health' || path.startsWith('/health/')) return true;
     if (path.startsWith('/licensing')) return true; // estado/activación/check (públicos y admin protegidos por sus guards)
+    if (path.startsWith('/installation')) return true; // estado/primera configuración (público, controlado por servicio)
     if (path.startsWith('/auth')) return true; // login/auth
     // estáticos servidos desde raíz si aplica
     if (path.endsWith('.css') || path.endsWith('.js') || path.endsWith('.png') || path.endsWith('.jpg') || path.endsWith('.svg') || path.endsWith('.ico') || path.endsWith('.webp') || path.endsWith('.map')) return true;

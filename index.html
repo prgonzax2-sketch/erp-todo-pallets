@@ -237,6 +237,36 @@
 
 <body class="font-sans text-xs" style="background:var(--ap-bg);color:var(--ap-ink);">
         <!-- /activacion (pantalla de bloqueo/activación, pública) -->
+    <!-- SETUP / Primera configuración (solo si no existe admin) -->
+    <div id="vista-setup" class="hidden" style="position:fixed;inset:0;z-index:12100;background:var(--ap-bg,#12181b);color:var(--ap-ink,#e8ece6);overflow:auto;padding:20px 14px;font-family:Manrope,system-ui,sans-serif;">
+      <div style="max-width:860px;margin:2vh auto;">
+        <div class="ap-card" style="padding:22px 20px;border-radius:14px;">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap;">
+            <span aria-hidden="true" style="display:inline-flex;width:40px;height:40px;border-radius:10px;align-items:center;justify-content:center;background:rgba(52,211,153,.14);color:#34d399;font-weight:800;font-size:20px;">✓</span>
+            <div><h1 style="margin:0;font-size:22px;line-height:1.2;color:var(--ap-ink,#e8ece6);">Primera configuración del sistema</h1><p style="margin:4px 0 0;color:var(--ap-muted,#9aa6a0);font-size:13px;">Cree el Administrador General y comparta la dirección web con sus sucursales.</p></div>
+          </div>
+          <div class="ap-card" style="margin:12px 0;padding:12px 14px;background:rgba(255,255,255,.03);border:1px solid var(--ap-border,rgba(255,255,255,.08));border-radius:10px;font-size:13px;line-height:1.55;">
+            <div style="font-weight:700;margin-bottom:6px;color:var(--ap-ink);">Direcciones de acceso</div>
+            <label class="block mb-3"><span class="block text-[11px] font-bold mb-1" style="color:var(--ap-muted);">Dirección web pública (HTTPS, para sucursales remotas)</span><div style="display:flex;gap:8px;align-items:stretch;flex-wrap:wrap;"><input id="setup-public-url" readonly class="ap-input" style="flex:1;min-width:220px;font-family:ui-monospace,monospace;font-size:14px;font-weight:700;" value="Generando túnel..."><button type="button" class="ap-btn ap-btn-primary" onclick="setupCopyText('setup-public-url','setup-copy-msg')">Copiar enlace</button></div><div style="margin-top:4px;font-size:12px;color:var(--ap-muted);">Compartí este enlace con las sucursales. Puede tardar unos instantes en estar disponible tras iniciar el túnel o reiniciar la PC.</div></label>
+            <label class="block mb-1"><span class="block text-[11px] font-bold mb-1" style="color:var(--ap-muted);">Dirección local (esta PC/servidor)</span><div style="display:flex;gap:8px;align-items:stretch;flex-wrap:wrap;"><input id="setup-local-url" readonly class="ap-input" style="flex:1;min-width:220px;font-family:ui-monospace,monospace;font-size:13px;font-weight:700;" value=""><button type="button" class="ap-btn ap-btn-ghost" onclick="setupCopyText('setup-local-url','setup-copy-msg')">Copiar</button></div></label>
+            <p id="setup-copy-msg" style="min-height:1.2em;margin:4px 0 0;font-size:12px;color:var(--ap-forest,#34d399);"></p>
+          </div>
+          <div class="ap-card" style="margin-top:14px;padding:14px;background:rgba(255,255,255,.02);border:1px solid var(--ap-border,rgba(255,255,255,.08));border-radius:10px;">
+            <h2 style="margin:0 0 8px;font-size:16px;color:var(--ap-ink);">Crear Administrador General</h2>
+            <p style="margin:0 0 10px;color:var(--ap-muted);font-size:13px;">Esta cuenta tendrá acceso total al sistema. Complete los datos para continuar.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label class="block md:col-span-2"><span class="block text-[11px] font-bold mb-1" style="color:var(--ap-muted);">Nombre (referencia)</span><input id="setup-admin-nombre" type="text" class="ap-input w-full" placeholder="Ej: Administrador General" autocomplete="name"></label>
+              <label class="block md:col-span-2"><span class="block text-[11px] font-bold mb-1" style="color:var(--ap-muted);">Usuario (correo electrónico)</span><input id="setup-admin-email" type="email" class="ap-input w-full" placeholder="admin@empresa.com" autocomplete="username"></label>
+              <label class="block"><span class="block text-[11px] font-bold mb-1" style="color:var(--ap-muted);">Contraseña</span><input id="setup-admin-password" type="password" class="ap-input w-full" placeholder="Mínimo 6 caracteres" autocomplete="new-password"></label>
+              <label class="block"><span class="block text-[11px] font-bold mb-1" style="color:var(--ap-muted);">Confirmar contraseña</span><input id="setup-admin-password2" type="password" class="ap-input w-full" placeholder="Repetir contraseña" autocomplete="new-password"></label>
+            </div>
+            <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;"><button id="setup-create-btn" type="button" class="ap-btn ap-btn-primary" onclick="setupCreateAdmin()">Crear administrador e ingresar</button><button type="button" class="ap-btn ap-btn-ghost" onclick="setupRefreshStatus()">Actualizar direcciones</button></div>
+            <p id="setup-msg" style="margin:8px 0 0;font-size:13px;min-height:1.2em;color:var(--ap-muted);"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="vista-activacion" class="hidden" style="position:fixed;inset:0;z-index:12000;background:var(--ap-bg,#12181b);color:var(--ap-ink,#e8ece6);overflow:auto;padding:20px 14px;font-family:Manrope,system-ui,sans-serif;">
       <div style="max-width:760px;margin:2vh auto;">
         <div class="ap-card" style="padding:22px 20px;border-radius:14px;">
@@ -594,6 +624,7 @@
                     <p id="sub-copy-msg" class="text-xs mt-1" style="color:var(--ap-forest,#34d399);min-height:1.2em;"></p></div>
                 </div>
                 <div class="mt-4 ap-card p-4 rounded border" style="border-color:var(--ap-border);"><h3 class="text-sm font-bold mb-2" style="color:var(--ap-ink);">Ingresar nueva licencia / renovación</h3><p class="text-xs text-ap-muted mb-2">Pegue la licencia (texto firmado) proporcionada por su proveedor y presione “Activar Sistema”.</p><textarea id="sub-license-token" rows="5" class="ap-input w-full font-mono text-xs" placeholder="Pegue aquí la licencia (JWS)"></textarea><div class="mt-3 flex flex-wrap items-center gap-2"><button id="sub-activate-btn" type="button" class="ap-btn ap-btn-primary" onclick="licActivateFrom('sub-license-token','sub-activate-msg','sub-activate-btn',true)">Activar Sistema</button><button type="button" class="ap-btn ap-btn-ghost" onclick="licRefreshSuscripcion()">Actualizar estado</button><span id="sub-activate-msg" class="text-xs text-ap-muted"></span></div></div>
+                <div class="mt-4 ap-card p-4 rounded border" style="border-color:var(--ap-border);"><h3 class="text-sm font-bold mb-2" style="color:var(--ap-ink);">Dirección web (acceso remoto)</h3><p class="text-xs text-ap-muted mb-2">Enlace público HTTPS del túnel para compartir con sucursales/remoto. Puede cambiar si se reinicia el túnel/PC.</p><div class="grid grid-cols-1 md:grid-cols-2 gap-3"><div><label class="block text-[11px] font-bold mb-1" style="color:var(--ap-muted);">Dirección web pública (túnel)</label><div class="flex gap-2"><input id="sub-tunnel-url" type="text" readonly class="ap-input flex-1 text-xs font-mono" value="No disponible"><button type="button" class="ap-btn ap-btn-ghost text-xs" onclick="setupCopyText('sub-tunnel-url','sub-tunnel-msg')">Copiar enlace</button></div></div><div><label class="block text-[11px] font-bold mb-1" style="color:var(--ap-muted);">Dirección local</label><div class="flex gap-2"><input id="sub-local-url" type="text" readonly class="ap-input flex-1 text-xs font-mono" value=""><button type="button" class="ap-btn ap-btn-ghost text-xs" onclick="setupCopyText('sub-local-url','sub-tunnel-msg')">Copiar</button></div></div></div><p id="sub-tunnel-msg" class="text-xs mt-2" style="color:var(--ap-muted);min-height:1.2em;"></p></div>
               </div>
             </div>
 
@@ -617,7 +648,7 @@
                                 <option value="rollos">Rollos</option>
                                 <option value="fleteros">Fleteros (CC)</option>
                                 <option value="rrhh-partes">RRHH Partes</option>
-                                <option value="turnos">Turnos (Planilla)</option>
+                                <option value="empleados">Empleados</option>
                                 <option value="subproductos">Subproductos</option>
                                 <option value="pallets">Pallets</option>
                             </select>
@@ -657,14 +688,7 @@
                             <input id="rpt-hasta" type="date" class="ap-input w-full p-2 rounded text-sm">
                         </label>
 
-                        <label id="rpt-wrap-turno" class="block hidden">
-                            <span class="block text-[11px] font-bold mb-1" style="color:var(--ap-muted);">Turno</span>
-                            <select id="rpt-turno" class="ap-select w-full p-2 rounded text-sm">
-                                <option value="">Todos los turnos</option>
-                                <option value="MAÑANA">MAÑANA</option>
-                                <option value="TARDE">TARDE</option>
-                            </select>
-                        </label>
+                        <!-- filtro turno eliminado (módulo turnos removido) -->
 
                         <div class="block sm:col-span-2 lg:col-span-4">
                             <div class="flex flex-col sm:flex-row gap-2">
@@ -847,9 +871,9 @@
 
                     
 
-                    <div class="tabla-rango-container overflow-auto flex-1  relative">
+                    <div class="tabla-rango-container overflow-x-auto overflow-y-auto flex-1 relative min-w-0" style="max-width:100%">
 
-                        <table class="w-full border-collapse text-left whitespace-nowrap text-xs">
+                        <table class="w-max min-w-full border-collapse text-left whitespace-nowrap text-xs">
 
                             <thead id="tabla-rango-head" class="sticky top-0 z-20 shadow-sm" style="background:var(--ap-elevated);color:var(--ap-ink)"></thead>
 
@@ -3512,7 +3536,7 @@
 
 
 
-                    let rowHtml = `<tr class="fila-rango" style="border-bottom:1px solid var(--ap-border)" data-id="${emp.id}" data-fijo="${esFijo}">
+                    let rowHtml = `<tr class="fila-rango" style="border-bottom:1px solid var(--ap-border)" data-id="${emp.id}" data-fijo="${esFijo}" data-precio="${precioMuestra}" data-pres="${presMuestra}">
 
                         <td class="p-1 sticky left-0 z-10" style="background:var(--ap-elevated);border-right:1px solid var(--ap-border);box-shadow:2px 0 5px -2px rgba(0,0,0,0.3)">
 
@@ -3634,9 +3658,13 @@
 
             const idEmp = tr.dataset.id;
 
-            const valorHs = parseFloat(tr.querySelector('.input-precio').value) || 0;
+            const _inpPrecio = tr.querySelector('.input-precio');
+            const _inpPres = tr.querySelector('.input-pres');
+            const valorHs = parseFloat(_inpPrecio ? _inpPrecio.value : tr.dataset.precio) || 0;
 
-            const valorPres = parseFloat(tr.querySelector('.input-pres').value) || 0;
+            const valorPres = parseFloat(_inpPres ? _inpPres.value : tr.dataset.pres) || 0;
+            tr.dataset.precio = valorHs;
+            tr.dataset.pres = valorPres;
 
 
 
@@ -3690,9 +3718,13 @@
 
 
 
-            const valorHs = parseFloat(tr.querySelector('.input-precio').value) || 0;
+            const _inpPrecio = tr.querySelector('.input-precio');
+            const _inpPres = tr.querySelector('.input-pres');
+            const valorHs = parseFloat(_inpPrecio ? _inpPrecio.value : tr.dataset.precio) || 0;
 
-            const valorPres = parseFloat(tr.querySelector('.input-pres').value) || 0;
+            const valorPres = parseFloat(_inpPres ? _inpPres.value : tr.dataset.pres) || 0;
+            tr.dataset.precio = valorHs;
+            tr.dataset.pres = valorPres;
 
 
 
@@ -3732,9 +3764,13 @@
 
 
 
-            const valorHs = parseFloat(tr.querySelector('.input-precio').value) || 0;
+            const _inpPrecio = tr.querySelector('.input-precio');
+            const _inpPres = tr.querySelector('.input-pres');
+            const valorHs = parseFloat(_inpPrecio ? _inpPrecio.value : tr.dataset.precio) || 0;
 
-            const valorPres = parseFloat(tr.querySelector('.input-pres').value) || 0;
+            const valorPres = parseFloat(_inpPres ? _inpPres.value : tr.dataset.pres) || 0;
+            tr.dataset.precio = valorHs;
+            tr.dataset.pres = valorPres;
 
             const esFijo = tr.dataset.fijo === 'true';
 
@@ -4350,6 +4386,21 @@
             const activo = !!(window.planillaModoHistorico && window.planillaModoHistorico.activo);
             planillaSetControlesModoHistorico(activo);
             if (activo) planillaAplicarBloqueoGrillaHistorica();
+            // Forzar recálculo de layout al alternar modo (evita columnas estiradas/corte sin Ctrl+F5)
+            try {
+                const wrap = document.querySelector('.tabla-rango-container');
+                const tbl = wrap ? wrap.querySelector('table') : null;
+                if (wrap) {
+                    wrap.style.maxWidth = '100%';
+                    // invalidación de layout
+                    void wrap.offsetWidth;
+                    if (tbl) { void tbl.offsetWidth; }
+                    requestAnimationFrame(() => {
+                        if (wrap) void wrap.scrollWidth;
+                        if (tbl) void tbl.offsetWidth;
+                    });
+                }
+            } catch (e) {}
         }
         window.planillaSalirModoHistoricoYCargar = async function() {
             const sel = document.getElementById('planilla-cierre-historico');
@@ -10935,22 +10986,6 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
   };
   function rptPad2(n){ return String(n).padStart(2,'0'); }
   function rptYmd(d){ return d.getUTCFullYear() + '-' + rptPad2(d.getUTCMonth()+1) + '-' + rptPad2(d.getUTCDate()); }
-  function rptBucketFin(bucketInicio, periodo){
-    var p = String(periodo||'day');
-    var s = String(bucketInicio||'').slice(0,10);
-    var m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(s);
-    if(!m) return s;
-    var y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
-    if(p === 'day') return s;
-    if(p === 'week'){
-      var dt = new Date(Date.UTC(y, mo-1, d)); dt.setUTCDate(dt.getUTCDate()+6); return rptYmd(dt);
-    }
-    if(p === 'month'){
-      var last = new Date(Date.UTC(y, mo, 0)); return rptYmd(last);
-    }
-    if(p === 'year') return y + '-12-31';
-    return s;
-  }
   function rptFmtMoney(v){ var n=Number(v); if(!isFinite(n)) n=0; try{ return '$ ' + n.toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}); }catch(e){ return '$ ' + n.toFixed(2); } }
   function rptEsc(s){ if(s==null) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function rptEnsureDetalleModal(){
@@ -10992,70 +11027,9 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
       return;
     }
   }
-  async function rptCargarDetalleBucket(bucketInicio, bucketFin, bucketLabel, aserradero, meta){
-    rptEnsureDetalleModal();
-    rptAbrirDetalleModal();
-    var titulo=document.getElementById('rpt-detalle-titulo');
-    var sub=document.getElementById('rpt-detalle-sub');
-    var body=document.getElementById('rpt-detalle-body');
-    if(titulo) titulo.textContent='Remitos del período ' + (bucketLabel || bucketInicio || '');
-    if(sub) sub.textContent='Rango: ' + (bucketInicio||'') + ' a ' + (bucketFin||'') + (aserradero ? (' · Aserradero: ' + aserradero) : '');
-    if(body) body.innerHTML='<div class="flex items-center gap-2 py-6 justify-center" style="color:var(--ap-muted,#93a197)"><span class="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span><span>Cargando remitos...</span></div>';
-    try{
-      var token = localStorage.getItem('token') || (typeof getToken==='function' ? getToken() : '') || '';
-      if(!token) throw new Error('Sesión no disponible.');
-      var base = (typeof API_URL!=='undefined' && API_URL) ? API_URL : '';
-      var params = new URLSearchParams();
-      params.set('fechaDesde', bucketInicio);
-      params.set('fechaHasta', bucketFin);
-      if(aserradero && aserradero !== 'Sin asignar') params.set('aserradero', aserradero);
-      var url = base + '/salidas-stock?' + params.toString();
-      var res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token, 'Accept':'application/json' }, cache:'no-store' });
-      if(!res.ok){
-        var msg='Error ' + res.status;
-        try{ var j=await res.json(); msg=(j&&(j.message||j.error))?(Array.isArray(j.message)?j.message.join(', '):j.message):msg; }catch(e){}
-        throw new Error(msg);
-      }
-      var payload = await res.json();
-      var list = Array.isArray(payload) ? payload : (payload && Array.isArray(payload.data) ? payload.data : []);
-      var incluirAnulados = !!(meta && meta.incluirAnulados);
-      if(!incluirAnulados){
-        list = list.filter(function(s){ var ed=String(s.estadoDespacho||'').toUpperCase(); var es=String(s.estado||'').toUpperCase(); return ed!=='ANULADO' && es!=='ANULADA'; });
-      }
-      if(!list.length){ body.innerHTML='<div class="py-6 text-center" style="color:var(--ap-muted,#93a197)">No hay remitos para este período.</div>'; return; }
-      var rows = list.map(function(s){
-        var num = s.remitoFisicoNumero || s.numeroRemito || ('#'+s.id);
-        var cli = s.clienteNombre || '-';
-        var fec = s.fecha || '';
-        var est = s.estadoDespacho || s.estado || '-';
-        var st = String(est).toUpperCase();
-        var disabled = (typeof verRemito !== 'function');
-        var link = '<button type="button" data-rpt-remito-id="'+rptEsc(s.id)+'" class="rpt-remito-link underline font-semibold" style="color:var(--ap-info,#7dd3fc)" '+(disabled?'disabled':'')+'>'+rptEsc(num)+'</button>';
-        return '<tr class="border-b" style="border-color:var(--ap-border,rgba(232,236,230,.12))">'+
-          '<td class="px-3 py-2 whitespace-nowrap">'+link+'</td>'+
-          '<td class="px-3 py-2">'+rptEsc(cli)+'</td>'+
-          '<td class="px-3 py-2 whitespace-nowrap">'+rptEsc(fec)+'</td>'+
-          '<td class="px-3 py-2 whitespace-nowrap">'+rptEsc(est)+'</td>'+
-          '<td class="px-3 py-2 text-right whitespace-nowrap">'+rptFmtMoney(s.subtotalNeto)+'</td>'+
-          '<td class="px-3 py-2 text-right whitespace-nowrap">'+rptFmtMoney(s.ivaMonto)+'</td>'+
-          '<td class="px-3 py-2 text-right font-semibold whitespace-nowrap">'+rptFmtMoney(s.total)+'</td>'+
-        '</tr>';
-      }).join('');
-      body.innerHTML='<div class="text-xs mb-2" style="color:var(--ap-muted,#93a197)">'+list.length+' remito(s) · Click en Nº para ver detalle'+(typeof verRemito!=='function'?' (vista de remito no disponible en este contexto)':'')+'</div>'+
-        '<div class="overflow-auto"><table class="min-w-full text-xs"><thead><tr style="background:var(--ap-elevated,#243038)">'+
-        '<th class="px-3 py-2 text-left">Nº Comprobante/Remito</th><th class="px-3 py-2 text-left">Cliente</th><th class="px-3 py-2 text-left">Fecha</th><th class="px-3 py-2 text-left">Estado</th>'+
-        '<th class="px-3 py-2 text-right">Subtotal Neto</th><th class="px-3 py-2 text-right">IVA</th><th class="px-3 py-2 text-right">Total</th>'+
-        '</tr></thead><tbody>'+rows+'</tbody></table></div>';
-      Array.prototype.forEach.call(body.querySelectorAll('.rpt-remito-link'), function(btn){
-        btn.addEventListener('click', function(ev){ ev.preventDefault(); ev.stopPropagation(); var rid=btn.getAttribute('data-rpt-remito-id'); if(rid) rptVerRemitoDesdeDetalle(rid); });
-      });
-    }catch(err){
-      body.innerHTML='<div class="py-6 text-center" style="color:var(--ap-ember,#f87171)">No se pudo cargar el detalle: '+rptEsc((err&&err.message)||err)+'</div>';
-    }
-  }
+  var _rptLastJson = null;
   var _rptReqSeq = 0;
   var _rptDebounceTimer = null;
-  var _rptLastJson = null;
 
   function rptSetProgress(show, text){
     var el=document.getElementById('rpt-progress'); if(!el) return;
@@ -11070,11 +11044,10 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
     var sub=document.getElementById('rpt-detalle-sub');
     var body=document.getElementById('rpt-detalle-body');
     var mod = (ctx && ctx.modulo) || (ctx && ctx.meta && ctx.meta.reporte) || 'módulo';
-    var bucket = (ctx && (ctx.bucketLabel || ctx.bucket_inicio || ctx.bucket)) || 'Sin bucket';
-    var rango = (ctx && ctx.rangoTxt) || ((ctx && ctx.bucket_inicio && ctx.bucket_fin) ? (ctx.bucket_inicio + ' a ' + ctx.bucket_fin) : '—');
-    var aserr = (ctx && ctx.aserradero) || (ctx && ctx.meta && ctx.meta.aserradero) || '—';
+    var rango = (ctx && ctx.rangoTxt) || ((ctx && ctx.meta) ? ((ctx.meta.desde||'') + ' a ' + (ctx.meta.hasta||'')) : '—');
+    var aserr = (ctx && ctx.aserradero) || (ctx && ctx.meta && ctx.meta.scopeAserradero) || 'Todos';
     if(titulo) titulo.textContent = 'Detalle — ' + mod;
-    if(sub) sub.textContent = 'Bucket: ' + bucket + ' · Rango: ' + rango + ' · Aserradero: ' + aserr;
+    if(sub) sub.textContent = 'Rango: ' + (rango||'—') + ' · Aserradero: ' + aserr;
     var row = (ctx && ctx.row && typeof ctx.row==='object') ? ctx.row : null;
     var rowsHtml = '';
     if(row){
@@ -11086,8 +11059,8 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
     if(body){
       body.innerHTML =
         '<div class="mb-3 p-3 rounded text-xs" style="background:var(--ap-elevated,#243038);border:1px solid var(--ap-border,rgba(232,236,230,.12));color:var(--ap-ink,#e8ece6)">'+
-          '<p class="font-semibold mb-1">Detalle de registros no disponible para este módulo/bucket.</p>'+
-          '<p style="color:var(--ap-muted,#93a197)">Se muestran los totales/datos disponibles de la fila seleccionada (sin inventar registros). Fuente de detalle por bucket no viable o sin endpoint listado.</p>'+
+          '<p class="font-semibold mb-1">Detalle de registros no disponible para este módulo/fila.</p>'+
+          '<p style="color:var(--ap-muted,#93a197)">Se muestran los totales/datos disponibles de la fila seleccionada (sin inventar registros).</p>'+
         '</div>'+
         (rowsHtml ? '<div class="overflow-auto"><table class="min-w-full text-xs"><tbody>'+rowsHtml+'</tbody></table></div>' : '<div class="text-xs" style="color:var(--ap-muted,#93a197)">Sin datos de fila disponibles.</div>');
     }
@@ -11109,69 +11082,108 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
 
   function rptBucketCtx(row, meta){
     var periodo = (meta && meta.periodo) || (document.getElementById('rpt-periodo')||{}).value || 'day';
-    var bi = row && row.bucket_inicio ? String(row.bucket_inicio).slice(0,10) : '';
-    var bf = bi ? rptBucketFin(bi, periodo) : '';
-    var bl = (row && row.bucket) || (bi ? (bi + (bf && bf!==bi ? (' a ' + bf) : '')) : '');
+    var desde = (meta && meta.desde) || (meta && meta.rango && meta.rango.desde) || '';
+    var hasta = (meta && meta.hasta) || (meta && meta.rango && meta.rango.hasta) || '';
     var aserr = (row && row.aserradero != null) ? String(row.aserradero) : '';
-    return { bucket_inicio: bi, bucket_fin: bf, bucketLabel: bl, aserradero: aserr, periodo: periodo };
+    return { desde: desde, hasta: hasta, rangoTxt: (desde||hasta) ? ((desde||'')+' a '+(hasta||'')) : '', aserradero: aserr, periodo: periodo };
   }
 
   async function rptAbrirDetalle(moduloReporte, row, meta){
     var ctx = rptBucketCtx(row, meta);
     ctx.row = row; ctx.meta = meta || {}; ctx.modulo = moduloReporte || (meta && meta.reporte) || '';
-    ctx.rangoTxt = (meta && meta.rango) ? ((meta.rango.desde||'')+' a '+(meta.rango.hasta||'')) : (ctx.bucket_inicio ? (ctx.bucket_inicio+' a '+(ctx.bucket_fin||ctx.bucket_inicio)) : '');
-    if(moduloReporte === 'ventas_remitos' && ctx.bucket_inicio){
-      return rptCargarDetalleBucket(ctx.bucket_inicio, ctx.bucket_fin, ctx.bucketLabel, ctx.aserradero, meta||{});
+    var desde = ctx.desde || ''; var hasta = ctx.hasta || ''; var aserr = ctx.aserradero || '';
+    ctx.rangoTxt = (desde||hasta) ? ((desde||'') + ' a ' + (hasta||'')) : '—';
+
+    if(moduloReporte === 'ventas_remitos'){
+      rptEnsureDetalleModal(); rptAbrirDetalleModal();
+      var bodyv=document.getElementById('rpt-detalle-body'); var titulov=document.getElementById('rpt-detalle-titulo'); var subv=document.getElementById('rpt-detalle-sub');
+      if(titulov) titulov.textContent='Remitos del período';
+      if(subv) subv.textContent='Rango: '+ctx.rangoTxt+(aserr?(' · Aserradero: '+aserr):'');
+      if(bodyv) bodyv.innerHTML='<div class="flex items-center gap-2 py-6 justify-center" style="color:var(--ap-muted,#93a197)"><span class="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span><span>Cargando remitos...</span></div>';
+      try{
+        var tokenv = localStorage.getItem('token') || (typeof getToken==='function' ? getToken() : '') || '';
+        if(!tokenv) throw new Error('Sesión no disponible.');
+        var basev = (typeof API_URL!=='undefined' && API_URL) ? API_URL : '';
+        var pv = new URLSearchParams(); if(desde) pv.set('fechaDesde',desde); if(hasta) pv.set('fechaHasta',hasta);
+        if(aserr && aserr!=='Sin asignar') pv.set('aserradero',aserr);
+        var rv = await fetch(basev + '/salidas-stock?' + pv.toString(), { headers: { 'Authorization': 'Bearer ' + tokenv, 'Accept':'application/json' }, cache:'no-store' });
+        if(!rv.ok){ var msgv='Error '+rv.status; try{ var jv=await rv.json(); msgv=(jv&&(jv.message||jv.error))?(Array.isArray(jv.message)?jv.message.join(', '):jv.message):msgv; }catch(e){} throw new Error(msgv); }
+        var payloadv = await rv.json();
+        var listv = Array.isArray(payloadv) ? payloadv : (payloadv && Array.isArray(payloadv.data) ? payloadv.data : []);
+        var incluirAnulados = !!(meta && meta.incluirAnulados);
+        if(!incluirAnulados){ listv = listv.filter(function(s){ var ed=String(s.estadoDespacho||'').toUpperCase(); var es=String(s.estado||'').toUpperCase(); return ed!=='ANULADO' && es!=='ANULADA'; }); }
+        if(!listv.length){ bodyv.innerHTML='<div class="py-6 text-center" style="color:var(--ap-muted,#93a197)">No hay remitos para este período.</div>'; return; }
+        var rowsv = listv.map(function(s){
+          var num = s.remitoFisicoNumero || s.numeroRemito || ('#'+s.id);
+          var cli = s.clienteNombre || '-'; var fec = s.fecha || ''; var est = s.estadoDespacho || s.estado || '-';
+          var disabled = (typeof verRemito !== 'function');
+          var link = '<button type="button" data-rpt-remito-id="'+rptEsc(s.id)+'" class="rpt-remito-link underline font-semibold" style="color:var(--ap-info,#7dd3fc)" '+(disabled?'disabled':'')+'>'+rptEsc(num)+'</button>';
+          return '<tr class="border-b" style="border-color:var(--ap-border,rgba(232,236,230,.12))">'+
+            '<td class="px-3 py-2 whitespace-nowrap">'+link+'</td>'+
+            '<td class="px-3 py-2">'+rptEsc(cli)+'</td>'+
+            '<td class="px-3 py-2 whitespace-nowrap">'+rptEsc(fec)+'</td>'+
+            '<td class="px-3 py-2 whitespace-nowrap">'+rptEsc(est)+'</td>'+
+            '<td class="px-3 py-2 text-right whitespace-nowrap">'+rptFmtMoney(s.subtotalNeto)+'</td>'+
+            '<td class="px-3 py-2 text-right whitespace-nowrap">'+rptFmtMoney(s.ivaMonto)+'</td>'+
+            '<td class="px-3 py-2 text-right font-semibold whitespace-nowrap">'+rptFmtMoney(s.total)+'</td>'+
+          '</tr>';
+        }).join('');
+        bodyv.innerHTML='<div class="text-xs mb-2" style="color:var(--ap-muted,#93a197)">'+listv.length+' remito(s) · Rango del reporte. Click en Nº para ver detalle.</div>'+
+          '<div class="overflow-auto"><table class="min-w-full text-xs"><thead><tr style="background:var(--ap-elevated,#243038)">'+
+          '<th class="px-3 py-2 text-left">Nº Comprobante/Remito</th><th class="px-3 py-2 text-left">Cliente</th><th class="px-3 py-2 text-left">Fecha</th><th class="px-3 py-2 text-left">Estado</th>'+
+          '<th class="px-3 py-2 text-right">Subtotal Neto</th><th class="px-3 py-2 text-right">IVA</th><th class="px-3 py-2 text-right">Total</th>'+
+          '</tr></thead><tbody>'+rowsv+'</tbody></table></div>';
+        Array.prototype.forEach.call(bodyv.querySelectorAll('.rpt-remito-link'), function(btn){
+          btn.addEventListener('click', function(ev){ ev.preventDefault(); ev.stopPropagation(); var rid=btn.getAttribute('data-rpt-remito-id'); if(rid) rptVerRemitoDesdeDetalle(rid); });
+        });
+      }catch(err){ rptRenderFallbackDetalle(ctx); }
+      return;
     }
-    // D-B/T1: baja viabilidad o sin endpoint listado -> fallback estático
-    if(moduloReporte === 'produccion' || moduloReporte === 'pallets_produccion' || moduloReporte === 'rrhh_partes_diarios'){
+
+    if(moduloReporte === 'produccion' || moduloReporte === 'pallets_produccion' || moduloReporte === 'empleados'){
       return rptRenderFallbackDetalle(ctx);
     }
-    rptEnsureDetalleModal();
-    rptAbrirDetalleModal();
-    var body=document.getElementById('rpt-detalle-body');
-    var titulo=document.getElementById('rpt-detalle-titulo');
-    var sub=document.getElementById('rpt-detalle-sub');
+
+    rptEnsureDetalleModal(); rptAbrirDetalleModal();
+    var body=document.getElementById('rpt-detalle-body'); var titulo=document.getElementById('rpt-detalle-titulo'); var sub=document.getElementById('rpt-detalle-sub');
     if(titulo) titulo.textContent = 'Detalle — ' + moduloReporte;
-    if(sub) sub.textContent = 'Bucket: ' + (ctx.bucketLabel||'—') + ' · Rango: ' + (ctx.rangoTxt||'—') + (ctx.aserradero?(' · Aserradero: '+ctx.aserradero):'');
+    if(sub) sub.textContent = 'Rango: ' + (ctx.rangoTxt||'—') + (aserr?(' · Aserradero: '+aserr):'');
     if(body) body.innerHTML='<div class="flex items-center gap-2 py-6 justify-center" style="color:var(--ap-muted,#93a197)"><span class="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span><span>Cargando detalle...</span></div>';
     try{
       var token = localStorage.getItem('token') || (typeof getToken==='function' ? getToken() : '') || '';
       if(!token) throw new Error('Sesión no disponible.');
       var base = (typeof API_URL!=='undefined' && API_URL) ? API_URL : '';
-      var desde = ctx.bucket_inicio || (meta && meta.rango && meta.rango.desde) || '';
-      var hasta = ctx.bucket_fin || ctx.bucket_inicio || (meta && meta.rango && meta.rango.hasta) || '';
-      var aserr = ctx.aserradero && ctx.aserradero !== 'Sin asignar' ? ctx.aserradero : '';
       var list = null, cols = null;
       if(moduloReporte === 'gastos'){
         var p = new URLSearchParams(); if(desde) p.set('fechaDesde',desde); if(hasta) p.set('fechaHasta',hasta);
         var rg = await fetch(base + '/gastos?' + p.toString(),{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'},cache:'no-store'}); if(!rg.ok) throw new Error('Error '+rg.status);
         var pg = await rg.json(); list = Array.isArray(pg) ? pg : (pg && Array.isArray(pg.items) ? pg.items : (pg && Array.isArray(pg.data) ? pg.data : []));
-        if(ctx.bucket_inicio){ list = list.filter(function(x){ return String(x.fecha||x.fechaGasto||'').slice(0,10)===ctx.bucket_inicio; }); }
         cols = ['fecha','concepto','rubroId','proveedorId','monto','estado','aserraderoId'];
       } else if(moduloReporte === 'rollos_ingresos'){
-        var pr = new URLSearchParams(); if(desde) pr.set('fechaDesde',desde); if(hasta) pr.set('fechaHasta',hasta); if(aserr) pr.set('aserradero',aserr);
+        var pr = new URLSearchParams(); if(desde) pr.set('fechaDesde',desde); if(hasta) pr.set('fechaHasta',hasta); if(aserr && aserr!=='Sin asignar') pr.set('aserradero',aserr);
         var rr = await fetch(base + '/ingreso-rollos?' + pr.toString(),{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'},cache:'no-store'}); if(!rr.ok) throw new Error('Error '+rr.status);
         var jr = await rr.json(); list = Array.isArray(jr) ? jr : (jr && Array.isArray(jr.items) ? jr.items : (jr && Array.isArray(jr.data) ? jr.data : []));
-        if(ctx.bucket_inicio){ list = list.filter(function(x){ return String(x.fecha||'').slice(0,10)===ctx.bucket_inicio; }); }
         cols = ['fecha','nroRemito','proveedorMaderaId','fleteroId','toneladas','m3','aserradero'];
       } else if(moduloReporte === 'cc_fleteros'){
         var pc = new URLSearchParams(); if(desde) pc.set('desde',desde); if(hasta) pc.set('hasta',hasta);
         var rc = await fetch(base + '/cuenta-corriente-fleteros/movimientos?' + pc.toString(),{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'},cache:'no-store'}); if(!rc.ok) throw new Error('Error '+rc.status);
         var jc = await rc.json(); list = Array.isArray(jc) ? jc : (jc && Array.isArray(jc.items) ? jc.items : (jc && Array.isArray(jc.data) ? jc.data : []));
-        if(ctx.bucket_inicio){ list = list.filter(function(x){ return String(x.fecha||'').slice(0,10)===ctx.bucket_inicio; }); }
+        if(row && row.fletero_id!=null){ list = list.filter(function(x){ return String(x.fleteroId||'')===String(row.fletero_id); }); }
         cols = ['fecha','tipo','fleteroId','monto','concepto','medio'];
-      } else if(moduloReporte === 'turnos_planilla'){
-        var pt = new URLSearchParams(); if(desde) pt.set('desde',desde); if(hasta) pt.set('hasta',hasta);
-        var rt = await fetch(base + '/turnos/rango?' + pt.toString(),{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'},cache:'no-store'}); if(!rt.ok) throw new Error('Error '+rt.status);
-        var jt = await rt.json(); list = Array.isArray(jt) ? jt : (jt && Array.isArray(jt.items) ? jt.items : (jt && Array.isArray(jt.data) ? jt.data : []));
-        if(ctx.bucket_inicio){ list = list.filter(function(x){ return String(x.fecha||'').slice(0,10)===ctx.bucket_inicio; }); }
-        cols = ['fecha','turno','empleadoId','nombre','estado','horas'];
+      } else if(moduloReporte === 'rrhh_partes_diarios'){
+        var rp = await fetch(base + '/partes-diarios',{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'},cache:'no-store'}); if(!rp.ok) throw new Error('Error '+rp.status);
+        var jp = await rp.json(); list = Array.isArray(jp) ? jp : (jp && Array.isArray(jp.items) ? jp.items : (jp && Array.isArray(jp.data) ? jp.data : []));
+        if(desde){ list = list.filter(function(x){ var f=String((x&& (x.fecha||x.fechaParte||x.createdAt))||'').slice(0,10); return !f || f >= desde; }); }
+        if(hasta){ list = list.filter(function(x){ var f=String((x&& (x.fecha||x.fechaParte||x.createdAt))||'').slice(0,10); return !f || f <= hasta; }); }
+        if(row && row.empleado_id!=null){ list = list.filter(function(x){ return String(x.empleadoId!=null?x.empleadoId:(x.empleado&&x.empleado.id))===String(row.empleado_id); }); }
+        if(aserr && aserr!=='Sin asignar'){ list = list.filter(function(x){ var a=(x.empleado&&x.empleado.aserradero)||x.aserradero||''; return !a || String(a)===aserr; }); }
+        list = list.map(function(x){ var e=x.empleado||{}; return Object.assign({}, x, { empleadoNombre: e.nombreCompleto || x.empleadoNombre || x.empleado_id || '', aserradero: e.aserradero || x.aserradero || '' }); });
+        cols = ['fecha','empleadoNombre','aserradero','horasTrabajadas','montoExtra','palletsFabricados','camionesCargados','turnosLimpieza','liquidado','detalleExtra'];
       } else if(moduloReporte === 'subproductos'){
-        var ps = new URLSearchParams(); if(desde) ps.set('desde',desde); if(hasta) ps.set('hasta',hasta); if(aserr) ps.set('aserradero',aserr);
+        var ps = new URLSearchParams(); if(desde) ps.set('desde',desde); if(hasta) ps.set('hasta',hasta); if(aserr && aserr!=='Sin asignar') ps.set('aserradero',aserr);
         var rs = await fetch(base + '/conciliacion/subproductos-egresos?' + ps.toString(),{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'},cache:'no-store'}); if(!rs.ok) throw new Error('Error '+rs.status);
         var js = await rs.json(); list = Array.isArray(js) ? js : (js && Array.isArray(js.items) ? js.items : (js && Array.isArray(js.data) ? js.data : []));
-        if(ctx.bucket_inicio){ list = list.filter(function(x){ return String(x.fecha||'').slice(0,10)===ctx.bucket_inicio; }); }
+        if(row && row.tipo){ list = list.filter(function(x){ return String(x.tipo||'')===String(row.tipo); }); }
         cols = ['fecha','tipo','especieDeclarada','tnEstimadas','tnReales','precioPorTn','aserradero'];
       } else {
         return rptRenderFallbackDetalle(ctx);
@@ -11183,11 +11195,9 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
       var rows = list.slice(0,200).map(function(it){
         return '<tr class="border-b" style="border-color:var(--ap-border,rgba(232,236,230,.12))">'+keys.map(function(k){ var v=it?it[k]:''; return '<td class="px-3 py-2">'+rptEsc(v==null?'':(typeof v==='object'?JSON.stringify(v):v))+'</td>'; }).join('')+'</tr>';
       }).join('');
-      body.innerHTML = '<div class="text-xs mb-2" style="color:var(--ap-muted,#93a197)">'+list.length+' registro(s)'+(list.length>200?' (mostrando 200)':'')+' · Filtro por bucket aplicado en cliente cuando corresponde.</div>'+
+      body.innerHTML = '<div class="text-xs mb-2" style="color:var(--ap-muted,#93a197)">'+list.length+' registro(s)'+(list.length>200?' (mostrando 200)':'')+' · Rango del reporte.</div>'+
         '<div class="overflow-auto"><table class="min-w-full text-xs"><thead><tr style="background:var(--ap-elevated,#243038)">'+head+'</tr></thead><tbody>'+rows+'</tbody></table></div>';
-    }catch(err){
-      rptRenderFallbackDetalle(ctx);
-    }
+    }catch(err){ rptRenderFallbackDetalle(ctx); }
   }
 
   function rptRenderPreview(json){
@@ -11250,8 +11260,6 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
 
   function rptActualizarCampos(opts){
     var periodo = (document.getElementById('rpt-periodo')||{}).value || 'month';
-    var modulo = (document.getElementById('rpt-modulo')||{}).value || '';
-    var esTurnos = modulo === 'turnos';
     var esSemana = periodo === 'week';
     var esMes = periodo === 'month';
     var esDia = periodo === 'day';
@@ -11262,7 +11270,6 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
     rptShow('rpt-wrap-anio', esAnio);
     rptShow('rpt-wrap-desde', esSemana);
     rptShow('rpt-wrap-hasta', esSemana);
-    rptShow('rpt-wrap-turno', esTurnos);
 
     var fecha = document.getElementById('rpt-fecha');
     var mes = document.getElementById('rpt-mes');
@@ -11297,16 +11304,15 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
     var mes = (document.getElementById('rpt-mes')||{}).value || '';
     var desde = (document.getElementById('rpt-desde')||{}).value || '';
     var hasta = (document.getElementById('rpt-hasta')||{}).value || '';
-    var turno = (document.getElementById('rpt-turno')||{}).value || '';
 
-    if(!modulo){ return { error: 'Seleccioná módulo.' }; }
+    if(!modulo){ return { error: 'Seleccioná un módulo.' }; }
     var params = new URLSearchParams();
     params.set('periodo', periodo);
     params.set('format', format);
 
     if(periodo === 'week'){
       if(!desde || !hasta){ return { error: 'Seleccioná el rango de días (desde y hasta) para la semana.' }; }
-      if(desde > hasta){ return { error: 'El rango es inválido: "Desde" no puede ser mayor que "Hasta".' }; }
+      if(desde > hasta){ return { error: 'El rango es inválido: Desde no puede ser mayor que Hasta.' }; }
       params.set('desde', desde);
       params.set('hasta', hasta);
       params.set('fecha', desde);
@@ -11323,10 +11329,8 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
       params.set('fecha', fecha);
     }
 
-    if(modulo === 'turnos' && turno){ params.set('turno', turno); }
     return { modulo: modulo, params: params, periodo: periodo, fecha: params.get('fecha') || fecha || mes || desde };
   }
-
   async function rptCargarPreview(opts){
     var built = rptBuildParams('json');
     if(built.error){ rptMsg(built.error, true); return; }
@@ -11365,7 +11369,7 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
   window.rptPrevisualizarJson = function(ev){ if(ev&&ev.preventDefault) ev.preventDefault(); if(_rptDebounceTimer) clearTimeout(_rptDebounceTimer); rptCargarPreview(); };
 
   function rptBindAutoRefresh(){
-    var ids = ['rpt-modulo','rpt-periodo','rpt-fecha','rpt-mes','rpt-anio','rpt-desde','rpt-hasta','rpt-turno'];
+    var ids = ['rpt-modulo','rpt-periodo','rpt-fecha','rpt-mes','rpt-anio','rpt-desde','rpt-hasta'];
     ids.forEach(function(id){
       var el=document.getElementById(id); if(!el || el._rptBound) return; el._rptBound = true;
       var deb = (el.tagName === 'INPUT' && (el.type==='date' || el.type==='month' || el.type==='number'));
@@ -11468,7 +11472,7 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
       {id:'rollos', label:'Rollos'},
       {id:'fleteros', label:'Fleteros (CC)'},
       {id:'rrhh-partes', label:'RRHH Partes'},
-      {id:'turnos', label:'Turnos (Planilla)'},
+      {id:'empleados', label:'Empleados'},
       {id:'subproductos', label:'Subproductos'},
       {id:'pallets', label:'Pallets'}
     ];
@@ -11534,6 +11538,116 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', rptInit); else rptInit();
 })();
 </script>
+<script>
+(function(){
+  'use strict';
+  var setupState = { status: null, inFlight: false, timer: null };
+  function $(id){ return document.getElementById(id); }
+  function showSetup(show){
+    var v = $('vista-setup');
+    if(!v) return;
+    if(show){ v.classList.remove('hidden'); v.style.display='block'; }
+    else { v.classList.add('hidden'); v.style.display='none'; }
+  }
+  function updateUrls(st){
+    var pub = (st && (st.publicUrl || st.tunnelUrl)) || '';
+    var local = (st && st.localUrl) || ('http://localhost:' + ((st && st.appPort) || 3000));
+    var sp = $('setup-public-url'); if(sp) sp.value = pub || 'No disponible (el túnel puede tardar unos instantes en iniciar)';
+    var sl = $('setup-local-url'); if(sl) sl.value = local;
+    var subP = $('sub-tunnel-url'); if(subP) subP.value = pub || 'No disponible';
+    var subL = $('sub-local-url'); if(subL) subL.value = local;
+  }
+  async function fetchSetupStatus(){
+    try{
+      var res = await fetch('/installation/setup-status', { method:'GET', headers:{'Accept':'application/json'}, cache:'no-store' });
+      if(!res.ok) return null;
+      return await res.json();
+    }catch(e){ return null; }
+  }
+  async function refreshSetup(){
+    if(setupState.inFlight) return;
+    setupState.inFlight = true;
+    try{
+      var st = await fetchSetupStatus();
+      if(!st) return;
+      setupState.status = st;
+      updateUrls(st);
+      if(st.needsSetup){
+        showSetup(true);
+        try{ if(location.pathname !== '/setup' && location.pathname !== '/activacion') history.replaceState(null,'','/setup'); }catch(e){}
+        ['login-section','dashboard-section','vista-activacion'].forEach(function(id){ var el=$(id); if(!el) return; el.style.setProperty('display','none','important'); });
+      } else {
+        showSetup(false);
+        if(location.pathname === '/setup'){ try{ history.replaceState(null,'','/'); }catch(e){} }
+      }
+    } finally { setupState.inFlight = false; }
+  }
+  window.setupRefreshStatus = refreshSetup;
+  window.setupCopyText = async function(fieldId,msgId){
+    var el = $(fieldId); var msg = $(msgId);
+    var val = el ? (el.value || el.textContent || '') : '';
+    if(!val || val === 'No disponible' || val.indexOf('Generando') === 0 || val.indexOf('No disponible (') === 0){
+      if(msg){ msg.textContent = 'No hay un enlace disponible para copiar todavía.'; msg.style.color = 'var(--ap-danger,#f87171)'; }
+      return;
+    }
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText){ await navigator.clipboard.writeText(val); }
+      else { if(el && el.focus) el.focus(); if(el && el.select) el.select(); var ok=document.execCommand&&document.execCommand('copy'); if(!ok) throw new Error('copy-failed'); }
+      if(msg){ msg.textContent = 'Copiado correctamente.'; msg.style.color = 'var(--ap-forest,#34d399)'; setTimeout(function(){ if(msg && msg.textContent==='Copiado correctamente.') msg.textContent=''; }, 2500); }
+    }catch(e){ if(msg){ msg.textContent = 'No se pudo copiar automáticamente. Seleccione y copie manualmente.'; msg.style.color = 'var(--ap-danger,#f87171)'; } }
+  };
+  window.setupCreateAdmin = async function(){
+    var btn = $('setup-create-btn'); var msg = $('setup-msg');
+    var nombre = ($('setup-admin-nombre')||{}).value || '';
+    var email = (($('setup-admin-email')||{}).value || '').trim().toLowerCase();
+    var p1 = ($('setup-admin-password')||{}).value || '';
+    var p2 = ($('setup-admin-password2')||{}).value || '';
+    if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
+      if(msg){ msg.textContent='Ingrese un correo/usuario válido.'; msg.style.color='var(--ap-danger,#f87171)'; } return;
+    }
+    if(!p1 || p1.length < 6){
+      if(msg){ msg.textContent='La contraseña debe tener al menos 6 caracteres.'; msg.style.color='var(--ap-danger,#f87171)'; } return;
+    }
+    if(p1 !== p2){
+      if(msg){ msg.textContent='Las contraseñas no coinciden.'; msg.style.color='var(--ap-danger,#f87171)'; } return;
+    }
+    if(btn){ btn.disabled=true; btn.textContent='Creando...'; }
+    if(msg){ msg.textContent='Creando administrador...'; msg.style.color='var(--ap-muted,#9aa6a0)'; }
+    try{
+      var res = await fetch('/installation/setup-admin', { method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'}, body: JSON.stringify({ email: email, password: p1, nombre: nombre }) });
+      var data = await res.json().catch(function(){ return {}; });
+      if(!res.ok || !data.ok){
+        var err = (data && (data.message || data.error)) || ('No se pudo crear el administrador ('+res.status+').');
+        if(typeof err === 'object') err = err.message || JSON.stringify(err);
+        throw new Error(err);
+      }
+      if(msg){ msg.textContent='Administrador creado. Iniciando sesión...'; msg.style.color='var(--ap-forest,#34d399)'; }
+      try{
+        var lr = await fetch('/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email: email, password: p1 }) });
+        var ld = await lr.json().catch(function(){ return {}; });
+        if(lr.ok && ld && ld.access_token){
+          try{ localStorage.setItem('token', ld.access_token); localStorage.setItem('rol', ld.rol||'admin'); localStorage.setItem('email', ld.email||email); if(ld.aserradero!=null) localStorage.setItem('aserradero', ld.aserradero); }catch(e){}
+          setTimeout(function(){ try{ history.replaceState(null,'','/'); }catch(e){} location.reload(); }, 500);
+          return;
+        }
+      }catch(e){}
+      if(msg){ msg.textContent='Administrador creado. Inicie sesión con sus credenciales.'; msg.style.color='var(--ap-forest,#34d399)'; }
+      setTimeout(function(){ try{ history.replaceState(null,'','/'); }catch(e){} location.reload(); }, 800);
+    }catch(e){
+      if(msg){ msg.textContent = (e && e.message) ? e.message : 'Error al crear el administrador.'; msg.style.color='var(--ap-danger,#f87171)'; }
+    }finally{
+      if(btn){ btn.disabled=false; btn.textContent='Crear administrador e ingresar'; }
+    }
+  };
+  function startSetup(){
+    refreshSetup();
+    if(setupState.timer) clearInterval(setupState.timer);
+    setupState.timer = setInterval(function(){ if(setupState.status && !setupState.status.needsSetup){ clearInterval(setupState.timer); setupState.timer=null; return; } refreshSetup(); }, 7000);
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', startSetup); else startSetup();
+})();
+</script>
+
 <script>
 (function(){
   'use strict';
