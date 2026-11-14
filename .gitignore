@@ -90,12 +90,19 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 /backups/*
 !/backups/.gitkeep
 
+# Local runtime data
+/dbdata/
+/license/
+/backups/
+
 # Quarantined legacy scripts/artifacts (local archive)
 /archive/
 
-# Licenciamiento local, backups y temporales
-/license/
-/backups/
+# Installer artifacts (build outputs)
+/dist-installer/*.exe
+/dist-installer/images/
+/dist-installer/*.tar
+*.tar
 *.tar.gz
 *.bak-*
 _fixarea.txt
