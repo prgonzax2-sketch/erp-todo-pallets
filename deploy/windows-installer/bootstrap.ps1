@@ -127,7 +127,7 @@ try {
         $dockerExe = Get-DockerExePath
     }
 
-    # Asegurar que Docker Desktop esté iniciado y el motor listo
+    # Asegurar que Docker Desktop esté iniciado y el motor listo (validación previa antes de docker compose)
     Refresh-DockerPath
     if (-not (Test-DockerEngineReady)) {
         $dockerExe = Get-DockerExePath
@@ -137,8 +137,16 @@ try {
         }
         Write-Log "Esperando a que el motor de Docker esté listo (puede tardar varios minutos la primera vez)..."
         if (-not (Wait-DockerEngineReady -TimeoutSeconds 900 -IntervalSeconds 5)) {
-            throw "Docker no está listo. Abra Docker Desktop, espere a que indique que está en ejecución (y complete su configuración inicial si se solicita) y vuelva a ejecutar el instalador."
+            $msgDocker = "Docker Desktop no está activo o no responde. Inicie Docker Desktop, espere a que indique que está en ejecución y vuelva a ejecutar el instalador."
+            Write-Log $msgDocker 'ERROR'
+            throw $msgDocker
         }
+    }
+    Refresh-DockerPath
+    if (-not (Test-DockerEngineReady)) {
+        $msgDocker = "Docker Desktop no está activo o no responde. Inicie Docker Desktop y vuelva a ejecutar el instalador."
+        Write-Log $msgDocker 'ERROR'
+        throw $msgDocker
     }
     Write-Log "Docker activo y listo."
 
@@ -161,6 +169,11 @@ try {
     if (-not (Test-Path $examplePath)) {
         throw "No se encontró .env.example en $AppDir."
     }
+    # URL oficial centralizada por defecto (remota). Se puede sobreescribir con variable de entorno externa LICENSE_SERVER_URL.
+    $defaultLicenseServerUrl = 'https://auth.sistemaaserradero.com.ar'
+    if (-not [string]::IsNullOrWhiteSpace($env:LICENSE_SERVER_URL)) {
+        $defaultLicenseServerUrl = $env:LICENSE_SERVER_URL.Trim()
+    }
     if (-not (Test-Path $envPath)) {
         $content = Get-Content -Path $examplePath -Raw -Encoding UTF8
         $dbPass = New-RandomSecret -Bytes 24
@@ -173,14 +186,33 @@ try {
         $content = Set-EnvValue -Content $content -Key 'TYPEORM_SYNCHRONIZE' -Value 'false'
         $content = Set-EnvValue -Content $content -Key 'LICENSE_ENFORCEMENT' -Value 'grace'
         $content = Set-EnvValue -Content $content -Key 'UPDATES_AUTO_ENABLED' -Value 'false'
+        # Inyecta LICENSE_SERVER_URL oficial/remota por defecto (salvo variable externa provista)
+        $content = Set-EnvValue -Content $content -Key 'LICENSE_SERVER_URL' -Value $defaultLicenseServerUrl
         Set-Content -Path $envPath -Value $content -Encoding UTF8
         try {
             $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
             & icacls $envPath /inheritance:r /grant:r "${user}:(R,W)" *> $null
         } catch { }
-        Write-Log ".env generado desde .env.example con credenciales seguras (DB/JWT)."
+        Write-Log ".env generado desde .env.example con credenciales seguras (DB/JWT) y LICENSE_SERVER_URL=$defaultLicenseServerUrl."
     } else {
         Write-Log ".env existente conservado (idempotente)."
+    }
+
+    # Advertencia de configuración de licencia para operación remota (no bloqueante)
+    try {
+        $licenseUrl = ""
+        $envContentForLicense = Get-Content -Path $envPath -Raw -Encoding UTF8
+        $mLic = [regex]::Match($envContentForLicense, '(?m)^\s*LICENSE_SERVER_URL\s*=\s*(.*)$')
+        if ($mLic.Success) {
+            $licenseUrl = $mLic.Groups[1].Value.Trim().Trim('"').Trim("'")
+        }
+        if ([string]::IsNullOrWhiteSpace($licenseUrl)) {
+            Write-Log "ADVERTENCIA: LICENSE_SERVER_URL no está configurado. Para validación de licencia remota configure la URL HTTPS del servidor de licencias (Auth central) en .env." 'WARN'
+        } elseif ($licenseUrl -match 'localhost|127\.0\.0\.1|host\.docker\.internal') {
+            Write-Log "ADVERTENCIA: LICENSE_SERVER_URL apunta a una dirección local ($licenseUrl). Para instalaciones remotas/otras PC debe usar la URL accesible del servidor de licencias central (HTTPS). Valor actual válido solo para pruebas locales." 'WARN'
+        }
+    } catch {
+        Write-Log "No se pudo verificar LICENSE_SERVER_URL: $($_.Exception.Message)" 'WARN'
     }
 
     # 4) Levantar stack (imagen pública en GHCR, sin credenciales embebidas)
@@ -189,11 +221,62 @@ try {
         throw "No se encontró docker-compose.prod.yml en $AppDir."
     }
 
-    Write-Log "Descargando/iniciando Sistema Aserradero ERP (docker compose up -d)..."
-    $cmdArgs = @('compose', '-f', 'docker-compose.prod.yml', '--env-file', '.env', 'up', '-d', '--pull', 'always')
-    $proc = Start-Process -FilePath "docker" -ArgumentList $cmdArgs -Wait -NoNewWindow -PassThru
-    if ($proc.ExitCode -ne 0) {
-        throw "No se pudo iniciar el sistema (docker compose código $($proc.ExitCode)). Verifique conexión a internet, que Docker Desktop esté en ejecución y que la imagen del sistema esté disponible. Revise bootstrap.log."
+    # Verificación final: Docker debe responder antes de ejecutar docker compose
+    Refresh-DockerPath
+    if (-not (Test-DockerEngineReady)) {
+        $msgDocker = "Docker Desktop no está activo o no responde. Inicie Docker Desktop y vuelva a ejecutar el instalador."
+        Write-Log $msgDocker 'ERROR'
+        throw $msgDocker
+    }
+
+    $composeCmdDisplay = 'docker compose -f "docker-compose.prod.yml" --env-file ".env" up -d --pull always'
+    $composeArgs = @('compose', '-f', 'docker-compose.prod.yml', '--env-file', '.env', 'up', '-d', '--pull', 'always')
+    $maxAttempts = 3
+    $composeOk = $false
+    $lastExitCode = 1
+    $lastOutput = ""
+
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        Write-Log "Descargando/iniciando Sistema Aserradero ERP (intento $attempt de $maxAttempts): $composeCmdDisplay"
+        $prevEap = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        $outputLines = & docker @composeArgs 2>&1
+        $lastExitCode = $LASTEXITCODE
+        $ErrorActionPreference = $prevEap
+        $lastOutput = ($outputLines | ForEach-Object { $_.ToString() }) -join "`r`n"
+
+        # Volcar salida completa al log (UTF-8)
+        if ($lastOutput) {
+            try {
+                Add-Content -Path $script:LogPath -Value "--- Salida docker compose (intento $attempt, código $lastExitCode) ---" -Encoding UTF8
+                Add-Content -Path $script:LogPath -Value $lastOutput -Encoding UTF8
+                Add-Content -Path $script:LogPath -Value "--- Fin salida intento $attempt ---" -Encoding UTF8
+            } catch { }
+        } else {
+            try { Add-Content -Path $script:LogPath -Value "--- Salida docker compose (intento $attempt, código $lastExitCode): (sin salida) ---" -Encoding UTF8 } catch { }
+        }
+
+        if ($lastExitCode -eq 0) {
+            $composeOk = $true
+            break
+        }
+
+        Write-Log "docker compose falló en intento $attempt con código $lastExitCode." 'WARN'
+        if ($attempt -lt $maxAttempts) {
+            Write-Log "Reintentando en 5 segundos..." 'WARN'
+            Start-Sleep -Seconds 5
+            Refresh-DockerPath
+            if (-not (Test-DockerEngineReady)) {
+                Write-Log "Docker dejó de responder antes del reintento." 'WARN'
+            }
+        }
+    }
+
+    if (-not $composeOk) {
+        Write-Log "Fallo persistente: comando ejecutado: $composeCmdDisplay" 'ERROR'
+        Write-Log "Fallo persistente: código de salida: $lastExitCode" 'ERROR'
+        if ($lastOutput) { Write-Log "Fallo persistente: traza/salida de Docker registrada arriba en bootstrap.log" 'ERROR' }
+        throw "No se pudo iniciar el sistema tras $maxAttempts intentos (docker compose código $lastExitCode). Revise bootstrap.log para ver el comando ejecutado y la traza completa de Docker."
     }
     Write-Log "Servicios iniciados correctamente."
 
