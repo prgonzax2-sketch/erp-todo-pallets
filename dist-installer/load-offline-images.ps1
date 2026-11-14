@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Carga offline de imágenes Docker (ERP y Auth) desde archivos .tar.
+  Carga offline de imagen(es) Docker del ERP cliente desde archivos .tar.
 
 .DESCRIPTION
   Diseñado para instaladores offline en Windows. Docker Desktop puede tardar en
@@ -8,8 +8,9 @@
   (docker info) antes de ejecutar docker load para evitar fallos silenciosos.
 
   - Bucle de espera: intenta cada 5 segundos, timeout máximo 5 minutos.
-  - Carga todos los .tar encontrados en el directorio de imágenes (ERP y Auth).
+  - Carga todos los .tar encontrados en el directorio de imágenes (ERP cliente).
   - Redirige toda la salida (stdout/stderr) a docker-load.log para depuración en planta.
+  - NOTA: el servidor de autenticación (Auth) es centralizado/remoto y NO se distribuye.
 
 .PARAMETER ImagesDir
   Directorio que contiene los archivos .tar. Por defecto: <script>\images
@@ -70,7 +71,7 @@ try {
         exit 2
     }
 
-    # --- Cargar archivos .tar (ERP y Auth) ---
+    # --- Cargar archivos .tar (ERP cliente) ---
     if (-not (Test-Path -LiteralPath $ImagesDir)) {
         Write-Error "No se encontró el directorio de imágenes: $ImagesDir"
         exit 3
