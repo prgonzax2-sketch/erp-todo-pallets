@@ -539,11 +539,38 @@ try {
 
     Remove-ResumeRunOnce
 
-    try {
-        $setupUrl = "http://localhost:$appPort/?setup=1"
-        Write-Log "Abriendo asistente de primera configuracion: $setupUrl"
-        Start-Process $setupUrl | Out-Null
-    } catch { Write-Log "No se pudo abrir el navegador automaticamente: $($_.Exception.Message)" 'WARN' }
+    # Esperar a que la app responda antes de abrir el navegador (evita fallos en reinstalaciones/arranques lentos)
+    $setupUrl = "http://localhost:$appPort/?setup=1"
+    $statusUrl = "http://localhost:$appPort/installation/setup-status"
+    $appReady = $false
+    Write-Log "Esperando a que el sistema web responda en http://localhost:$appPort ..."
+    $waitApp = 0
+    while ($waitApp -lt 180 -and -not $appReady) {
+        try {
+            $r = Invoke-WebRequest -Uri $statusUrl -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
+            if ($r.StatusCode -ge 200 -and $r.StatusCode -lt 500) { $appReady = $true }
+        } catch {
+            try {
+                $r2 = Invoke-WebRequest -Uri "http://localhost:$appPort/" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
+                if ($r2.StatusCode -ge 200 -and $r2.StatusCode -lt 600) { $appReady = $true }
+            } catch { }
+        }
+        if (-not $appReady) { Start-Sleep -Seconds 3; $waitApp += 3 }
+    }
+    if ($appReady) { Write-Log "Sistema web listo. Abriendo asistente/navegador." }
+    else { Write-Log "El sistema web no confirmo disponibilidad a tiempo; se intentara abrir el navegador de todos modos." 'WARN' }
+
+    $opened = $false
+    for ($i = 1; $i -le 3 -and -not $opened; $i++) {
+        try {
+            Start-Process $setupUrl | Out-Null
+            $opened = $true
+            Write-Log "Navegador abierto en $setupUrl"
+        } catch {
+            try { cmd /c start "" "$setupUrl" | Out-Null; $opened = $true; Write-Log "Navegador abierto (cmd start) en $setupUrl" } catch { Write-Log "Intento $i: no se pudo abrir el navegador: $($_.Exception.Message)" 'WARN' }
+        }
+        if (-not $opened -and $i -lt 3) { Start-Sleep -Seconds 2 }
+    }
 
     Write-Log "Instalacion completada. Acceso local: http://localhost:$appPort"
     Write-Host ""

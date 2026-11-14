@@ -29,7 +29,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "Crear acceso directo en el Escritorio"; GroupDescription: "Accesos directos:"; Flags: unchecked
+Name: "desktopicon"; Description: "Crear acceso directo en el Escritorio"; GroupDescription: "Accesos directos:"; Flags: checkedonce
 
 [Files]
 ; Empaquetar artefactos de despliegue y helpers internos
