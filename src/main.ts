@@ -6,26 +6,51 @@ import type { NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
 import { AppModule } from './app.module.js';
 
-function readTunnelOriginCached() {
-  let cache: { value: string | null; at: number } = { value: null, at: 0 };
+function normalizeHttpsOrigin(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const s = String(raw).trim().replace(/\/$/, '');
+  if (!/^https:\/\//i.test(s)) return null;
+  try {
+    const u = new URL(s);
+    if (u.username || u.password) return null;
+    return u.origin;
+  } catch {
+    return null;
+  }
+}
+
+function readDynamicPublicOriginsCached() {
+  let cache: { values: string[]; at: number } = { values: [], at: 0 };
   const ttlMs = 5000;
   return () => {
     const now = Date.now();
-    if (now - cache.at < ttlMs) return cache.value;
+    if (now - cache.at < ttlMs) return cache.values;
     cache.at = now;
+    const values = new Set<string>();
+    const stateDir = process.env.LICENSE_STATE_PATH || './license';
+
+    // URL propia configurada (identidad por instalación)
+    const envConfigured = normalizeHttpsOrigin(process.env.PUBLIC_BASE_URL || process.env.SERVER_PUBLIC_URL || '');
+    if (envConfigured) values.add(envConfigured);
     try {
-      const stateDir = process.env.LICENSE_STATE_PATH || './license';
-      const raw = readFileSync(join(stateDir, 'tunnel_url.txt'), 'utf8').trim().replace(/\/$/, '');
-      if (/^https:\/\//i.test(raw)) {
-        const u = new URL(raw);
-        cache.value = u.origin;
-        return cache.value;
-      }
-      cache.value = null;
+      const raw = readFileSync(join(stateDir, 'server_public_url.txt'), 'utf8').trim();
+      const fileConfigured = normalizeHttpsOrigin(raw);
+      if (fileConfigured) values.add(fileConfigured);
     } catch {
-      cache.value = null;
+      // ignore
     }
-    return cache.value;
+
+    // URL dinámica de túnel activo (quick tunnel u otro)
+    try {
+      const raw = readFileSync(join(stateDir, 'tunnel_url.txt'), 'utf8').trim();
+      const tunnel = normalizeHttpsOrigin(raw);
+      if (tunnel) values.add(tunnel);
+    } catch {
+      // ignore
+    }
+
+    cache.values = Array.from(values);
+    return cache.values;
   };
 }
 
@@ -40,20 +65,20 @@ async function bootstrap() {
     }),
   );
 
-  // CORS: permite orígenes configurados (CORS_ORIGINS) y el origen público del túnel activo (si existe).
+  // CORS: permite orígenes configurados (CORS_ORIGINS), URL propia configurada del servidor y URL de túnel activa.
   // Por defecto se restringen orígenes cruzados no autorizados; same-origin/no-origin permitidos.
   const staticCorsOrigins = (process.env.CORS_ORIGINS || '')
     .split(',')
     .map((o) => o.trim().replace(/\/$/, ''))
     .filter(Boolean);
-  const getTunnelOrigin = readTunnelOriginCached();
+  const getDynamicPublicOrigins = readDynamicPublicOriginsCached();
   app.enableCors({
     origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
       if (!origin) return callback(null, true);
       const normalized = origin.replace(/\/$/, '');
       if (staticCorsOrigins.includes(normalized)) return callback(null, true);
-      const tunnelOrigin = getTunnelOrigin();
-      if (tunnelOrigin && normalized === tunnelOrigin) return callback(null, true);
+      const dynamicOrigins = getDynamicPublicOrigins();
+      if (dynamicOrigins.includes(normalized)) return callback(null, true);
       // Si no hay orígenes estáticos configurados, mantener comportamiento restrictivo para orígenes cruzados no autorizados.
       return callback(null, false);
     },

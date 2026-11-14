@@ -336,6 +336,9 @@ try {
     if (-not (Test-Path $examplePath)) { throw "No se encontro .env.example en $AppDir." }
     $defaultLicenseServerUrl = 'https://auth.sistemaaserradero.com.ar'
     if (-not [string]::IsNullOrWhiteSpace($env:LICENSE_SERVER_URL)) { $defaultLicenseServerUrl = $env:LICENSE_SERVER_URL.Trim() }
+    $defaultPublicBaseUrl = ''
+    if (-not [string]::IsNullOrWhiteSpace($env:PUBLIC_BASE_URL)) { $defaultPublicBaseUrl = $env:PUBLIC_BASE_URL.Trim() }
+    elseif (-not [string]::IsNullOrWhiteSpace($env:SERVER_PUBLIC_URL)) { $defaultPublicBaseUrl = $env:SERVER_PUBLIC_URL.Trim() }
     if (-not (Test-Path $envPath)) {
         $content = Get-Content -Path $examplePath -Raw -Encoding UTF8
         $dbPass = New-RandomSecret -Bytes 24
@@ -349,6 +352,7 @@ try {
         $content = Set-EnvValue -Content $content -Key 'LICENSE_ENFORCEMENT' -Value 'grace'
         $content = Set-EnvValue -Content $content -Key 'UPDATES_AUTO_ENABLED' -Value 'false'
         $content = Set-EnvValue -Content $content -Key 'LICENSE_SERVER_URL' -Value $defaultLicenseServerUrl
+        $content = Set-EnvValue -Content $content -Key 'PUBLIC_BASE_URL' -Value $defaultPublicBaseUrl
         Set-Content -Path $envPath -Value $content -Encoding UTF8
         try {
             $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name

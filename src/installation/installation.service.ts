@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
@@ -24,14 +24,84 @@ export class InstallationService {
     return this.stateDir;
   }
 
+  private normalizePublicBaseUrl(rawInput: string): string {
+    const raw = String(rawInput || '').trim();
+    if (!raw) throw new BadRequestException('La URL pública no puede estar vacía.');
+    let u: URL;
+    try {
+      u = new URL(raw);
+    } catch {
+      throw new BadRequestException('La URL pública no es válida. Use formato https://subdominio.dominio');
+    }
+    if (u.protocol !== 'https:') {
+      throw new BadRequestException('La URL pública debe usar HTTPS (ej.: https://cliente-erp.sistemaaserradero.com.ar).');
+    }
+    if (u.username || u.password) {
+      throw new BadRequestException('La URL pública no debe incluir credenciales.');
+    }
+    // Normalizar como origen (identidad de acceso). Se ignoran path/query/fragment para evitar ambigüedad.
+    const origin = u.origin.replace(/\/$/, '');
+    if (!/^https:\/\/[a-z0-9.-]+(?::\d+)?$/i.test(origin)) {
+      throw new BadRequestException('La URL pública tiene un formato no permitido.');
+    }
+    return origin;
+  }
+
+  async readConfiguredPublicUrl(): Promise<string | null> {
+    // 1) Persistencia local (identidad por instalación)
+    try {
+      const p = path.join(this.stateDir, 'server_public_url.txt');
+      const raw = (await fs.readFile(p, 'utf8')).trim();
+      if (raw) {
+        try {
+          return this.normalizePublicBaseUrl(raw);
+        } catch {
+          this.logger.warn('server_public_url.txt contiene una URL inválida; se ignora.');
+        }
+      }
+    } catch {
+      // no configurado
+    }
+    // 2) Variables de entorno (preconfig/deploy)
+    const envUrl = String(process.env.PUBLIC_BASE_URL || process.env.SERVER_PUBLIC_URL || '').trim();
+    if (envUrl) {
+      try {
+        return this.normalizePublicBaseUrl(envUrl);
+      } catch {
+        this.logger.warn('PUBLIC_BASE_URL/SERVER_PUBLIC_URL inválida en entorno; se ignora.');
+      }
+    }
+    return null;
+  }
+
+  async writeConfiguredPublicUrl(url: string | null): Promise<string | null> {
+    const p = path.join(this.stateDir, 'server_public_url.txt');
+    await fs.mkdir(this.stateDir, { recursive: true });
+    if (url == null || String(url).trim() === '') {
+      try { await fs.unlink(p); } catch { /* ignore */ }
+      return null;
+    }
+    const normalized = this.normalizePublicBaseUrl(url);
+    const tmp = p + '.tmp';
+    await fs.writeFile(tmp, normalized + '\n', { encoding: 'utf8', mode: 0o600 });
+    await fs.rename(tmp, p);
+    try { await fs.chmod(p, 0o600); } catch { }
+    return normalized;
+  }
+
   async readTunnelUrl(): Promise<string | null> {
     try {
       const p = path.join(this.stateDir, 'tunnel_url.txt');
       const raw = (await fs.readFile(p, 'utf8')).trim();
       if (!raw) return null;
-      // aceptar solo URLs https del quick tunnel
-      if (/^https:\/\/[a-z0-9.-]+\.trycloudflare\.com\/?$/i.test(raw) || /^https:\/\//i.test(raw)) {
-        return raw.replace(/\/$/, '');
+      // aceptar URLs https (quick tunnel u otro túnel activo)
+      if (/^https:\/\//i.test(raw)) {
+        try {
+          const u = new URL(raw);
+          return u.origin.replace(/\/$/, '');
+        } catch {
+          return raw.replace(/\/$/, '');
+        }
       }
       return null;
     } catch {
@@ -72,21 +142,46 @@ export class InstallationService {
 
   async getSetupStatus() {
     const hasAdmin = await this.hasAdmin();
-    const tunnelUrl = await this.readTunnelUrl();
+    const [configuredPublicUrl, dynamicTunnelUrl] = await Promise.all([
+      this.readConfiguredPublicUrl(),
+      this.readTunnelUrl(),
+    ]);
     const appPortRaw = Number(process.env.PORT || process.env.APP_PORT || 3000);
     const appPort = Number.isFinite(appPortRaw) && appPortRaw > 0 ? appPortRaw : 3000;
     const localUrl = `http://localhost:${appPort}`;
     const lanAccess = this.getLanAccessUrls(appPort);
+    const effectivePublicUrl = configuredPublicUrl || dynamicTunnelUrl || null;
     return {
       needsSetup: !hasAdmin,
       hasAdmin,
       localUrl,
-      publicUrl: tunnelUrl,
-      tunnelUrl,
+      // Compat: publicUrl/tunnelUrl preferían el túnel dinámico; ahora priorizan URL propia configurada y conservan dinámica.
+      publicUrl: effectivePublicUrl,
+      tunnelUrl: dynamicTunnelUrl,
+      configuredPublicUrl,
+      dynamicTunnelUrl,
+      serverPublicUrl: configuredPublicUrl,
       appPort,
       lanAccessUrls: lanAccess.map((x) => x.url),
       lanAccess,
       serverHostname: os.hostname(),
+    };
+  }
+
+  async setServerPublicUrl(body: { url?: string; remove?: boolean }, opts?: { allowWhenAdminExists?: boolean }) {
+    const hasAdmin = await this.hasAdmin();
+    if (hasAdmin && !opts?.allowWhenAdminExists) {
+      throw new ForbiddenException('La configuración inicial ya fue completada. Solo un administrador puede modificar la URL del servidor.');
+    }
+    const remove = !!body?.remove || !String(body?.url || '').trim();
+    const saved = remove ? await this.writeConfiguredPublicUrl(null) : await this.writeConfiguredPublicUrl(String(body?.url || ''));
+    return {
+      ok: true,
+      configuredPublicUrl: saved,
+      serverPublicUrl: saved,
+      message: saved
+        ? 'URL pública del servidor guardada para esta instalación.'
+        : 'URL pública configurada eliminada. Se usará la URL dinámica del túnel (si está disponible).',
     };
   }
 

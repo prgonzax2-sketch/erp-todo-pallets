@@ -2,6 +2,21 @@
 
 > Estado operativo resumido. Memoria vigente: `MEMORY.md`. Instrucciones: `AGENTS.md`. Actualizado: **2026-11-12 (SDD Reportes T1-T4 + instalador offline/devops, rama `feature/agente-licencia-activacion-ui`, push solicitado)**. Sistema **estable** (dev `:3000`, `TYPEORM_SYNCHRONIZE=true` en runtime dev).
 
+## Sesión 2026-11-14 — URL pública propia por instalación/servidor (SDD + implementación, rama `feat/agente-per-install-public-url`)
+
+**Objetivo:** cada instalación/servidor ERP configura y persiste su propia URL de acceso remoto (subdominio por cliente bajo `sistemaaserradero.com.ar`) al instalar/configurar, diferenciando LAN vs remoto, sin romper licenciamiento.
+
+- **SDD:** `specs/per-install-public-url/{spec,plan,tasks}.md` (identidad por instalación; persistencia `PUBLIC_BASE_URL`/`SERVER_PUBLIC_URL` + `license/server_public_url.txt`; setup inicial y edición admin controlada; CORS origen configurado+dinámico; túnel nombrado/DNS Cloudflare central **operativo/manual** documentado; quick tunnel dinámico como fallback; licenciamiento/Auth sin cambios).
+- **BE:** `InstallationService` valida/lee/escribe URL propia (`server_public_url.txt`), `getSetupStatus` expone `configuredPublicUrl`/`dynamicTunnelUrl`/compat `publicUrl`; `POST /installation/server-url` (setup sin admin, o admin JWT post-setup) guarda/elimina; `main.ts` CORS permite origen configurado (env+archivo) y túnel dinámico.
+- **Config/instalador:** `.env.example` y `deploy/docker-compose.prod.yml` con `PUBLIC_BASE_URL`/`SERVER_PUBLIC_URL`; `bootstrap.ps1` preserva/pasa `PUBLIC_BASE_URL` al generar `.env`.
+- **FE (`index.html`):** setup y Suscripción muestran/guardan “URL propia del servidor (configurada)” separada de URL dinámica de túnel y LAN/local; `updateUrls`/`setupSaveServerUrl` + fetch con Authorization.
+- **Docs:** `docs/operacion-url-remota-cliente.md` (alta cliente: subdominio único + URL en instalador/setup + túnel nombrado Cloudflare/DNS + `config.yml` ingress `localhost:APP_PORT`, checklist, seguridad, LAN vs remoto, relación con licenciamiento).
+- **Verificación:** `npm run build` OK; `src/licensing/licensing.service.spec.ts` 14/14 PASS (sin regresión). Prueba runtime/E2E de instalación con URL propia y túnel nombrado: pendiente operativa en entorno cliente/Cloudflare.
+- **Notas:** sin cambios en contrato Auth (`/v1/license/verify`, JWKS, binding). La URL del ERP es dato operativo independiente. No push/merge automático; artefactos de distribución (`.exe`, imagen/tar, tag GHCR) no regenerados en este commit.
+
+---
+
+
 ## Sesión 2026-11-12/13 (cont.2) — Reportes: quitar Turnos, agregar Empleados (resumen completo), quitar Bucket, fixes + DevTools (SDD)
 
 **Rama:** `feature/agente-licencia-activacion-ui` (local, cambios sin commit al momento de este handoff). **SDD:** `specs/reportes-empleados-ajustes/{spec,plan,tasks}.md`.

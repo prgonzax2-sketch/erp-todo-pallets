@@ -23,6 +23,9 @@ services:
       # Licenciamiento / updates (estado espejo en volumen /app/license)
       # Piloto F5: LICENSE_ENFORCEMENT=grace, UPDATES_AUTO_ENABLED=false (sin auto-update estricto)
       APP_VERSION: ${APP_VERSION:-0.0.1}
+      # URL pública propia del servidor/instalación (identidad de acceso remoto, por cliente)
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+      SERVER_PUBLIC_URL: ${SERVER_PUBLIC_URL:-}
       LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}
       LICENSE_PUBLIC_KEY_PEM: ${LICENSE_PUBLIC_KEY_PEM:-}
       LICENSE_ENFORCEMENT: ${LICENSE_ENFORCEMENT:-grace}
