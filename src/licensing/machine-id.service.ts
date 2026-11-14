@@ -30,7 +30,11 @@ export class MachineIdService implements OnModuleInit {
 
   async ensureInstanceKey(): Promise<string> {
     if (this.instanceIdValue) return this.instanceIdValue;
-    await fs.mkdir(this.stateDir, { recursive: true });
+    try {
+      await fs.mkdir(this.stateDir, { recursive: true });
+    } catch (e) {
+      this.logger.warn(`No se pudo crear directorio de licenciamiento ${this.stateDir}: ${(e as Error).message}`);
+    }
     try {
       const existing = (await fs.readFile(this.instanceKeyPath, 'utf8')).trim();
       if (existing) {
@@ -41,12 +45,21 @@ export class MachineIdService implements OnModuleInit {
       // crear
     }
     const key = randomUUID();
-    const tmp = this.instanceKeyPath + '.tmp';
-    await fs.writeFile(tmp, key + '\n', { encoding: 'utf8', mode: 0o600 });
-    await fs.rename(tmp, this.instanceKeyPath);
-    try { await fs.chmod(this.instanceKeyPath, 0o600); } catch {}
+    let persisted = false;
+    try {
+      const tmp = this.instanceKeyPath + '.tmp';
+      await fs.writeFile(tmp, key + '\n', { encoding: 'utf8', mode: 0o600 });
+      await fs.rename(tmp, this.instanceKeyPath);
+      try { await fs.chmod(this.instanceKeyPath, 0o600); } catch {}
+      persisted = true;
+      this.logger.log('Generada nueva instance.key para licenciamiento');
+    } catch (e) {
+      this.logger.warn(`No se pudo persistir instance.key en ${this.instanceKeyPath}: ${(e as Error).message}. Se usará un ID temporal en memoria para esta ejecución.`);
+    }
     this.instanceIdValue = key;
-    this.logger.log('Generada nueva instance.key para licenciamiento');
+    if (!persisted) {
+      this.logger.warn('instance.key no persistido: el ID de instalación puede cambiar al reiniciar si no se corrigen permisos del volumen/estado.');
+    }
     return key;
   }
 
