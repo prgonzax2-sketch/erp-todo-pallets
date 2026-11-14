@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { promises as fs } from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { Usuario } from '../auth/entities/usuario.entity.js';
 import { AppInstallationState } from '../licensing/entities/app-installation-state.entity.js';
@@ -38,18 +39,54 @@ export class InstallationService {
     }
   }
 
+  private getLanAccessUrls(appPort: number) {
+    const urls: { ip: string; url: string; interface: string }[] = [];
+    try {
+      const nets = os.networkInterfaces();
+      for (const [name, addrs] of Object.entries(nets)) {
+        for (const addr of addrs || []) {
+          if (!addr || addr.internal) continue;
+          const family = String((addr as any).family || '');
+          const isV4 = family === 'IPv4' || family === '4';
+          if (!isV4) continue;
+          const ip = String(addr.address || '').trim();
+          if (!ip) continue;
+          urls.push({ ip, url: `http://${ip}:${appPort}`, interface: name });
+        }
+      }
+    } catch {
+      // best-effort
+    }
+    // Preferir redes privadas comunes primero
+    const score = (ip: string) => {
+      if (ip.startsWith('192.168.')) return 0;
+      if (ip.startsWith('10.')) return 1;
+      if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(ip)) return 2;
+      return 3;
+    };
+    urls.sort((a, b) => score(a.ip) - score(b.ip) || a.interface.localeCompare(b.interface) || a.ip.localeCompare(b.ip));
+    // dedupe por ip
+    const seen = new Set<string>();
+    return urls.filter((u) => (seen.has(u.ip) ? false : (seen.add(u.ip), true)));
+  }
+
   async getSetupStatus() {
     const hasAdmin = await this.hasAdmin();
     const tunnelUrl = await this.readTunnelUrl();
-    const appPort = Number(process.env.PORT || process.env.APP_PORT || 3000);
-    const localUrl = `http://localhost:${Number.isFinite(appPort) && appPort > 0 ? appPort : 3000}`;
+    const appPortRaw = Number(process.env.PORT || process.env.APP_PORT || 3000);
+    const appPort = Number.isFinite(appPortRaw) && appPortRaw > 0 ? appPortRaw : 3000;
+    const localUrl = `http://localhost:${appPort}`;
+    const lanAccess = this.getLanAccessUrls(appPort);
     return {
       needsSetup: !hasAdmin,
       hasAdmin,
       localUrl,
       publicUrl: tunnelUrl,
       tunnelUrl,
-      appPort: Number.isFinite(appPort) && appPort > 0 ? appPort : 3000,
+      appPort,
+      lanAccessUrls: lanAccess.map((x) => x.url),
+      lanAccess,
+      serverHostname: os.hostname(),
     };
   }
 
