@@ -172,14 +172,51 @@ export class LicensingService {
       });
       return { ok: true, state, message: clockTamper ? 'Verificado, pero se detectó posible clock rollback' : 'Verificación exitosa' };
     } catch (e) {
-      const msg = (e as Error).message || String(e);
+      const msg = this.formatVerifyError(e, baseUrl);
       this.logger.warn(`Fallo verificación licencia (${reason}): ${msg}`);
+      // Preserva estado previamente verificado (inalcanzable != revocado/suspendido/not_found)
       const state = await this.stateService.updateState({
         ...basePatch,
         lastError: msg,
       });
       return { ok: false, state, message: msg };
     }
+  }
+
+  private formatVerifyError(e: unknown, baseUrl: string): string {
+    const raw = e instanceof Error ? e.message : String(e || 'Error desconocido');
+    const code = String((e as any)?.code || (e as any)?.cause?.code || '').toUpperCase();
+    const causeMsg = String((e as any)?.cause?.message || '').toLowerCase();
+    const rawLower = raw.toLowerCase();
+    const hint = ' Verifique LICENSE_SERVER_URL y la conectividad con el servidor de licencias.';
+
+    // Errores de red/DNS/TLS/timeout: no confundir con revocado/suspendido
+    if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') {
+      return `No se pudo alcanzar el servidor de licencias (DNS: no se resolvió el host).${hint}`;
+    }
+    if (code === 'ECONNREFUSED') {
+      return `No se pudo conectar al servidor de licencias (conexión rechazada).${hint}`;
+    }
+    if (code === 'ETIMEDOUT' || code === 'UND_ERR_CONNECT_TIMEOUT' || (e as any)?.name === 'AbortError') {
+      return `Tiempo de espera agotado al conectar con el servidor de licencias.${hint}`;
+    }
+    if (code === 'ECONNRESET' || code === 'EPIPE' || code === 'ENETUNREACH' || code === 'EHOSTUNREACH') {
+      return `Se interrumpió la conexión con el servidor de licencias (red).${hint}`;
+    }
+    if (code.includes('CERT') || code.includes('TLS') || code.includes('SSL') || rawLower.includes('certificate') || rawLower.includes('self signed') || causeMsg.includes('certificate')) {
+      return `Error de seguridad/TLS al conectar con el servidor de licencias.${hint}`;
+    }
+    if (e instanceof TypeError && /fetch failed/i.test(raw)) {
+      // fetch de Node suele envolver fallos de red en TypeError: fetch failed (cause con detalle)
+      if (code || causeMsg) {
+        return `No se pudo conectar con el servidor de licencias.${hint}`;
+      }
+      return `No se pudo conectar con el servidor de licencias (red/DNS).${hint}`;
+    }
+    if (/verify http \d+/i.test(raw)) {
+      return raw.length > 220 ? raw.slice(0, 220) + '…' : raw;
+    }
+    return raw.length > 220 ? raw.slice(0, 220) + '…' : raw;
   }
 
   /**

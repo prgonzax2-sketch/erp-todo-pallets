@@ -5,7 +5,7 @@
 
 services:
   app:
-    image: ${APP_IMAGE:-ghcr.io/OWNER/erp-todo-pallets}:${APP_IMAGE_TAG:-latest}
+    image: ${APP_IMAGE:-ghcr.io/prgonzax2-sketch/erp-todo-pallets}:${APP_IMAGE_TAG:-v1.0.0}
     container_name: sistema_aserradero_app
     restart: unless-stopped
     env_file:
@@ -26,7 +26,7 @@ services:
       LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}
       LICENSE_PUBLIC_KEY_PEM: ${LICENSE_PUBLIC_KEY_PEM:-}
       LICENSE_ENFORCEMENT: ${LICENSE_ENFORCEMENT:-grace}
-      LICENSE_CHECK_INTERVAL_MS: ${LICENSE_CHECK_INTERVAL_MS:-86400000}
+      LICENSE_CHECK_INTERVAL_MS: ${LICENSE_CHECK_INTERVAL_MS:-1800000}
       LICENSE_GRACE_HOURS: ${LICENSE_GRACE_HOURS:-72}
       LICENSE_STATE_PATH: /app/license
       LICENSE_CLOCK_SKEW_SEC: ${LICENSE_CLOCK_SKEW_SEC:-300}
