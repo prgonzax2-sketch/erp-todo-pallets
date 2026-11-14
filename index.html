@@ -236,7 +236,67 @@
 </head>
 
 <body class="font-sans text-xs" style="background:var(--ap-bg);color:var(--ap-ink);">
-    <div id="licensing-banner-root" aria-live="polite" aria-atomic="false"></div>
+        <!-- /activacion (pantalla de bloqueo/activación, pública) -->
+    <!-- SETUP / Primera configuración (solo si no existe admin) -->
+    <div id="vista-setup" class="hidden" style="position:fixed;inset:0;z-index:12100;background:var(--ap-bg,#12181b);color:var(--ap-ink,#e8ece6);overflow:auto;padding:20px 14px;font-family:Manrope,system-ui,sans-serif;">
+      <div style="max-width:860px;margin:2vh auto;">
+        <div class="ap-card" style="padding:22px 20px;border-radius:14px;">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap;">
+            <span aria-hidden="true" style="display:inline-flex;width:40px;height:40px;border-radius:10px;align-items:center;justify-content:center;background:rgba(52,211,153,.14);color:#34d399;font-weight:800;font-size:20px;">✓</span>
+            <div><h1 style="margin:0;font-size:22px;line-height:1.2;color:var(--ap-ink,#e8ece6);">Primera configuración del sistema</h1><p style="margin:4px 0 0;color:var(--ap-muted,#9aa6a0);font-size:13px;">Cree el Administrador General y comparta la dirección web con sus sucursales.</p></div>
+          </div>
+          <div class="ap-card" style="margin:12px 0;padding:12px 14px;background:rgba(255,255,255,.03);border:1px solid var(--ap-border,rgba(255,255,255,.08));border-radius:10px;font-size:13px;line-height:1.55;">
+            <div style="font-weight:700;margin-bottom:6px;color:var(--ap-ink);">Direcciones de acceso</div>
+            <label class="block mb-3"><span class="block text-[11px] font-bold mb-1" style="color:var(--ap-muted);">Dirección web pública (HTTPS, para sucursales remotas)</span><div style="display:flex;gap:8px;align-items:stretch;flex-wrap:wrap;"><input id="setup-public-url" readonly class="ap-input" style="flex:1;min-width:220px;font-family:ui-monospace,monospace;font-size:14px;font-weight:700;" value="Generando túnel..."><button type="button" class="ap-btn ap-btn-primary" onclick="setupCopyText('setup-public-url','setup-copy-msg')">Copiar enlace</button></div><div style="margin-top:4px;font-size:12px;color:var(--ap-muted);">Compartí este enlace con las sucursales. Puede tardar unos instantes en estar disponible tras iniciar el túnel o reiniciar la PC.</div></label>
+            <label class="block mb-1"><span class="block text-[11px] font-bold mb-1" style="color:var(--ap-muted);">Dirección local (esta PC/servidor)</span><div style="display:flex;gap:8px;align-items:stretch;flex-wrap:wrap;"><input id="setup-local-url" readonly class="ap-input" style="flex:1;min-width:220px;font-family:ui-monospace,monospace;font-size:13px;font-weight:700;" value=""><button type="button" class="ap-btn ap-btn-ghost" onclick="setupCopyText('setup-local-url','setup-copy-msg')">Copiar</button></div></label>
+            <p id="setup-copy-msg" style="min-height:1.2em;margin:4px 0 0;font-size:12px;color:var(--ap-forest,#34d399);"></p>
+          </div>
+          <div class="ap-card" style="margin-top:14px;padding:14px;background:rgba(255,255,255,.02);border:1px solid var(--ap-border,rgba(255,255,255,.08));border-radius:10px;">
+            <h2 style="margin:0 0 8px;font-size:16px;color:var(--ap-ink);">Crear Administrador General</h2>
+            <p style="margin:0 0 10px;color:var(--ap-muted);font-size:13px;">Esta cuenta tendrá acceso total al sistema. Complete los datos para continuar.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label class="block md:col-span-2"><span class="block text-[11px] font-bold mb-1" style="color:var(--ap-muted);">Nombre (referencia)</span><input id="setup-admin-nombre" type="text" class="ap-input w-full" placeholder="Ej: Administrador General" autocomplete="name"></label>
+              <label class="block md:col-span-2"><span class="block text-[11px] font-bold mb-1" style="color:var(--ap-muted);">Usuario (correo electrónico)</span><input id="setup-admin-email" type="email" class="ap-input w-full" placeholder="admin@empresa.com" autocomplete="username"></label>
+              <label class="block"><span class="block text-[11px] font-bold mb-1" style="color:var(--ap-muted);">Contraseña</span><input id="setup-admin-password" type="password" class="ap-input w-full" placeholder="Mínimo 6 caracteres" autocomplete="new-password"></label>
+              <label class="block"><span class="block text-[11px] font-bold mb-1" style="color:var(--ap-muted);">Confirmar contraseña</span><input id="setup-admin-password2" type="password" class="ap-input w-full" placeholder="Repetir contraseña" autocomplete="new-password"></label>
+            </div>
+            <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;"><button id="setup-create-btn" type="button" class="ap-btn ap-btn-primary" onclick="setupCreateAdmin()">Crear administrador e ingresar</button><button type="button" class="ap-btn ap-btn-ghost" onclick="setupRefreshStatus()">Actualizar direcciones</button></div>
+            <p id="setup-msg" style="margin:8px 0 0;font-size:13px;min-height:1.2em;color:var(--ap-muted);"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="vista-activacion" class="hidden" style="position:fixed;inset:0;z-index:12000;background:var(--ap-bg,#12181b);color:var(--ap-ink,#e8ece6);overflow:auto;padding:20px 14px;font-family:Manrope,system-ui,sans-serif;">
+      <div style="max-width:760px;margin:2vh auto;">
+        <div class="ap-card" style="padding:22px 20px;border-radius:14px;">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap;">
+            <span aria-hidden="true" style="display:inline-flex;width:40px;height:40px;border-radius:10px;align-items:center;justify-content:center;background:rgba(248,113,113,.14);color:#f87171;font-weight:800;font-size:20px;">!</span>
+            <div><h1 style="margin:0;font-size:22px;line-height:1.2;color:var(--ap-ink,#e8ece6);">Sistema Bloqueado / Pendiente de Activación</h1><p style="margin:4px 0 0;color:var(--ap-muted,#9aa6a0);font-size:13px;">Se requiere una licencia válida para usar el ERP.</p></div>
+          </div>
+          <div id="act-status-box" class="ap-card" style="margin:12px 0;padding:12px 14px;background:rgba(255,255,255,.03);border:1px solid var(--ap-border,rgba(255,255,255,.08));border-radius:10px;font-size:13px;line-height:1.55;"></div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4" style="margin-top:14px;">
+            <div>
+              <h2 style="margin:0 0 8px;font-size:15px;color:var(--ap-ink);">Código de Hardware de esta instalación</h2>
+              <p style="margin:0 0 10px;color:var(--ap-muted);font-size:13px;">Envía este código a tu proveedor para generar tu licencia. Debe coincidir exactamente con el registrado en el sistema central.</p>
+              <label class="block mb-3"><span class="block text-[11px] font-bold mb-1" style="color:var(--ap-muted);">Hardware ID / Machine ID (<code>machine_id_hash</code>)</span><div style="display:flex;gap:8px;align-items:stretch;"><textarea id="act-hwid" readonly rows="2" class="ap-input" style="flex:1;font-family:ui-monospace,monospace;font-size:13px;font-weight:700;resize:none;"></textarea><button type="button" class="ap-btn ap-btn-ghost" onclick="licCopyField('act-hwid','act-copy-msg')">Copiar código</button></div></label>
+              <label class="block mb-1"><span class="block text-[11px] font-bold mb-1" style="color:var(--ap-muted);">ID de instalación / instancia (<code>instance_id</code>)</span><div style="display:flex;gap:8px;align-items:stretch;"><input id="act-instance" readonly class="ap-input" style="flex:1;font-family:ui-monospace,monospace;font-size:13px;font-weight:700;" value=""><button type="button" class="ap-btn ap-btn-ghost" onclick="licCopyField('act-instance','act-copy-msg')">Copiar</button></div></label>
+              <p id="act-copy-msg" style="min-height:1.2em;margin:4px 0 0;font-size:12px;color:var(--ap-forest,#34d399);"></p>
+            </div>
+            <div>
+              <h2 style="margin:0 0 8px;font-size:15px;color:var(--ap-ink);">Activar Sistema</h2>
+              <p style="margin:0 0 10px;color:var(--ap-muted);font-size:13px;">Pegue la licencia (texto firmado) que recibió de su proveedor y presione “Activar Sistema”.</p>
+              <textarea id="act-license-token" rows="8" class="ap-input w-full" style="font-family:ui-monospace,monospace;font-size:12px;" placeholder="Pegue aquí la licencia (JWS firmado) proporcionada por su proveedor"></textarea>
+              <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;"><button id="act-activate-btn" type="button" class="ap-btn ap-btn-primary" onclick="licActivateFrom('act-license-token','act-activate-msg','act-activate-btn',false)">Activar Sistema</button><button type="button" class="ap-btn ap-btn-ghost" onclick="licRefreshActivationStatus()">Actualizar estado</button></div>
+              <p id="act-activate-msg" style="margin:8px 0 0;font-size:13px;min-height:1.2em;color:var(--ap-muted);"></p>
+            </div>
+          </div>
+        </div>
+        <p style="text-align:center;margin:12px 0 0;color:var(--ap-muted);font-size:12px;">Si el problema persiste, verifique la fecha/hora del servidor y contacte a soporte con los códigos mostrados.</p>
+      </div>
+    </div>
+
+<div id="licensing-banner-root" aria-live="polite" aria-atomic="false"></div>
 
 
 
@@ -316,6 +376,7 @@
                 <button id="tab-rollos-fletes" onclick="cambiarVista('rollos-fletes')" class="ap-nav-item" type="button">Rollo</button>
                 <button id="tab-gastos" onclick="cambiarVista('gastos')" class="ap-nav-item" type="button">Gastos</button>
                 <button id="tab-reportes" onclick="cambiarVista('reportes')" class="ap-nav-item" type="button">Reportes</button>
+                <button id="tab-suscripcion" onclick="cambiarVista('suscripcion')" class="ap-nav-item hidden" type="button">Mi Suscripción</button>
             </nav>
             <div class="ap-sidebar-footer">
                 <button onclick="abrirModalArchivo()" class="ap-btn ap-btn-info w-full" type="button">Archivo</button>
@@ -544,7 +605,30 @@
                 </div>
             </div>
 
-            <!-- VISTA REPORTES (aditiva, API /reportes JSON+CSV; descarga CSV con JWT) -->
+                        <!-- VISTA SUSCRIPCIÓN (licenciamiento) -->
+            <div id="vista-suscripcion" class="ap-vista hidden p-4 md:p-6 space-y-6" aria-label="Mi Suscripción">
+              <div class="ap-card rounded-lg shadow border p-4 md:p-5">
+                <div class="flex flex-wrap items-start justify-between gap-2 mb-4"><div><h2 class="ap-view-title text-lg font-black text-ap-ink">Mi Suscripción</h2><p class="text-[11px] text-ap-muted mt-0.5">Estado de licencia de esta instalación. Puede renovar ingresando una nueva licencia.</p></div><span id="sub-badge-estado" class="ap-badge" style="border:1px solid var(--ap-border);color:var(--ap-muted);">-</span></div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div class="ap-card p-4 rounded border" style="border-color:var(--ap-border);background:var(--ap-elevated,#243038);"><h3 class="text-sm font-bold mb-3" style="color:var(--ap-ink);">Estado de la licencia</h3><dl class="space-y-2 text-sm">
+                    <div class="flex justify-between gap-3"><dt class="text-ap-muted">Estado</dt><dd id="sub-estado" class="font-bold text-right">-</dd></div>
+                    <div class="flex justify-between gap-3"><dt class="text-ap-muted">Plan</dt><dd id="sub-plan" class="text-right">-</dd></div>
+                    <div class="flex justify-between gap-3"><dt class="text-ap-muted">Fecha de vencimiento</dt><dd id="sub-vencimiento" class="text-right">-</dd></div>
+                    <div class="flex justify-between gap-3"><dt class="text-ap-muted">Días restantes</dt><dd id="sub-dias" class="font-bold text-right">-</dd></div>
+                    <div class="flex justify-between gap-3"><dt class="text-ap-muted">Fin de gracia</dt><dd id="sub-gracia" class="text-right">-</dd></div>
+                    <div class="flex justify-between gap-3"><dt class="text-ap-muted">Última verificación</dt><dd id="sub-check" class="text-right">-</dd></div>
+                  </dl><p id="sub-msg" class="mt-3 text-xs text-ap-muted"></p></div>
+                  <div class="ap-card p-4 rounded border" style="border-color:var(--ap-border);background:var(--ap-elevated,#243038);"><h3 class="text-sm font-bold mb-3" style="color:var(--ap-ink);">Códigos de esta instalación</h3><p class="text-xs text-ap-muted mb-3">Envíe estos códigos a su proveedor para generar o renovar su licencia. Deben coincidir exactamente con los registrados en el sistema central.</p>
+                    <label class="block mb-3"><span class="block text-[11px] font-bold mb-1" style="color:var(--ap-muted);">Hardware ID / Machine ID (<code>machine_id_hash</code>)</span><div class="flex gap-2"><input id="sub-hwid" type="text" readonly class="ap-input flex-1 text-xs font-mono" value=""><button type="button" class="ap-btn ap-btn-ghost text-xs" onclick="licCopyField('sub-hwid','sub-copy-msg')">Copiar</button></div></label>
+                    <label class="block mb-1"><span class="block text-[11px] font-bold mb-1" style="color:var(--ap-muted);">ID de instalación / instancia (<code>instance_id</code>)</span><div class="flex gap-2"><input id="sub-instance" type="text" readonly class="ap-input flex-1 text-xs font-mono" value=""><button type="button" class="ap-btn ap-btn-ghost text-xs" onclick="licCopyField('sub-instance','sub-copy-msg')">Copiar</button></div></label>
+                    <p id="sub-copy-msg" class="text-xs mt-1" style="color:var(--ap-forest,#34d399);min-height:1.2em;"></p></div>
+                </div>
+                <div class="mt-4 ap-card p-4 rounded border" style="border-color:var(--ap-border);"><h3 class="text-sm font-bold mb-2" style="color:var(--ap-ink);">Ingresar nueva licencia / renovación</h3><p class="text-xs text-ap-muted mb-2">Pegue la licencia (texto firmado) proporcionada por su proveedor y presione “Activar Sistema”.</p><textarea id="sub-license-token" rows="5" class="ap-input w-full font-mono text-xs" placeholder="Pegue aquí la licencia (JWS)"></textarea><div class="mt-3 flex flex-wrap items-center gap-2"><button id="sub-activate-btn" type="button" class="ap-btn ap-btn-primary" onclick="licActivateFrom('sub-license-token','sub-activate-msg','sub-activate-btn',true)">Activar Sistema</button><button type="button" class="ap-btn ap-btn-ghost" onclick="licRefreshSuscripcion()">Actualizar estado</button><span id="sub-activate-msg" class="text-xs text-ap-muted"></span></div></div>
+                <div class="mt-4 ap-card p-4 rounded border" style="border-color:var(--ap-border);"><h3 class="text-sm font-bold mb-2" style="color:var(--ap-ink);">Dirección web (acceso remoto)</h3><p class="text-xs text-ap-muted mb-2">Enlace público HTTPS del túnel para compartir con sucursales/remoto. Puede cambiar si se reinicia el túnel/PC.</p><div class="grid grid-cols-1 md:grid-cols-2 gap-3"><div><label class="block text-[11px] font-bold mb-1" style="color:var(--ap-muted);">Dirección web pública (túnel)</label><div class="flex gap-2"><input id="sub-tunnel-url" type="text" readonly class="ap-input flex-1 text-xs font-mono" value="No disponible"><button type="button" class="ap-btn ap-btn-ghost text-xs" onclick="setupCopyText('sub-tunnel-url','sub-tunnel-msg')">Copiar enlace</button></div></div><div><label class="block text-[11px] font-bold mb-1" style="color:var(--ap-muted);">Dirección local</label><div class="flex gap-2"><input id="sub-local-url" type="text" readonly class="ap-input flex-1 text-xs font-mono" value=""><button type="button" class="ap-btn ap-btn-ghost text-xs" onclick="setupCopyText('sub-local-url','sub-tunnel-msg')">Copiar</button></div></div></div><p id="sub-tunnel-msg" class="text-xs mt-2" style="color:var(--ap-muted);min-height:1.2em;"></p></div>
+              </div>
+            </div>
+
+<!-- VISTA REPORTES (aditiva, API /reportes JSON+CSV; descarga CSV con JWT) -->
             <div id="vista-reportes" class="ap-vista hidden p-4 md:p-6 space-y-6" aria-label="Reportes">
                 <div class="ap-card rounded-lg shadow border p-4 md:p-5">
                     <div class="flex flex-wrap items-start justify-between gap-2 mb-4">
@@ -564,7 +648,7 @@
                                 <option value="rollos">Rollos</option>
                                 <option value="fleteros">Fleteros (CC)</option>
                                 <option value="rrhh-partes">RRHH Partes</option>
-                                <option value="turnos">Turnos (Planilla)</option>
+                                <option value="empleados">Empleados</option>
                                 <option value="subproductos">Subproductos</option>
                                 <option value="pallets">Pallets</option>
                             </select>
@@ -604,26 +688,36 @@
                             <input id="rpt-hasta" type="date" class="ap-input w-full p-2 rounded text-sm">
                         </label>
 
-                        <label id="rpt-wrap-turno" class="block hidden">
-                            <span class="block text-[11px] font-bold mb-1" style="color:var(--ap-muted);">Turno</span>
-                            <select id="rpt-turno" class="ap-select w-full p-2 rounded text-sm">
-                                <option value="">Todos los turnos</option>
-                                <option value="MAÑANA">MAÑANA</option>
-                                <option value="TARDE">TARDE</option>
-                            </select>
-                        </label>
+                        <!-- filtro turno eliminado (módulo turnos removido) -->
 
                         <div class="block sm:col-span-2 lg:col-span-4">
                             <div class="flex flex-col sm:flex-row gap-2">
                                 <button id="rpt-btn-descargar" type="submit" class="flex-1 px-4 py-2 rounded font-bold text-sm shadow-sm" style="background:var(--ap-forest); color:#07130d; border:1px solid var(--ap-forest);">Descargar Reporte (CSV)</button>
-                                <button id="rpt-btn-ver" type="button" onclick="rptPrevisualizarJson(event)" class="flex-1 px-4 py-2 rounded font-bold text-sm" style="background:var(--ap-elevated,#243038); color:var(--ap-ink,#e8ece6); border:1px solid var(--ap-border,rgba(232,236,230,.12));">Ver en Pantalla</button>
+                                <button id="rpt-btn-imprimir" type="button" onclick="rptImprimirReporteCompleto(event)" class="flex-1 px-4 py-2 rounded font-bold text-sm" style="background:var(--ap-elevated,#243038); color:var(--ap-ink,#e8ece6); border:1px solid var(--ap-border,rgba(232,236,230,.12));">Imprimir reporte completo</button>
                             </div>
                         </div>
                     </form>
                     <div id="rpt-msg" class="text-xs mt-3 min-h-[1rem]" style="color:var(--ap-muted);" aria-live="polite"></div>
+                    <div id="rpt-progress" class="hidden mt-3 p-3 rounded text-xs flex items-center gap-2" style="border:1px solid var(--ap-border,rgba(232,236,230,.12));background:var(--ap-elevated,#243038);color:var(--ap-ink,#e8ece6);" aria-live="polite">
+                        <span class="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" aria-hidden="true"></span>
+                        <span id="rpt-progress-text">Generando reporte...</span>
+                    </div>
                     <div id="rpt-preview-container" class="hidden mt-6 overflow-x-auto ap-card" style="border:1px solid var(--ap-border,rgba(232,236,230,.12));">
                         <table id="rpt-preview-table" class="w-full text-sm text-left" style="min-width:640px; border-collapse:collapse;"></table>
                     </div>
+                    <div id="rpt-print-root" class="hidden mt-6"></div>
+                    <style id="rpt-print-style">
+                      @media print {
+                        body * { visibility: hidden !important; }
+                        #rpt-print-root, #rpt-print-root * { visibility: visible !important; }
+                        #rpt-print-root { display: block !important; position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; background: #fff !important; color: #111 !important; }
+                        .rpt-print-section { page-break-inside: avoid; break-inside: avoid; margin-bottom: 14px; }
+                        .rpt-print-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+                        .rpt-print-table th, .rpt-print-table td { border: 1px solid #d1d5db; padding: 4px 6px; text-align: left; }
+                        .rpt-print-table th { background: #f3f4f6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                        .rpt-print-cover { margin-bottom: 16px; border-bottom: 2px solid #111; padding-bottom: 8px; }
+                      }
+                    </style>
                 </div>
             </div>
 
@@ -777,9 +871,9 @@
 
                     
 
-                    <div class="tabla-rango-container overflow-auto flex-1  relative">
+                    <div class="tabla-rango-container overflow-x-auto overflow-y-auto flex-1 relative min-w-0" style="max-width:100%">
 
-                        <table class="w-full border-collapse text-left whitespace-nowrap text-xs">
+                        <table class="w-max min-w-full border-collapse text-left whitespace-nowrap text-xs">
 
                             <thead id="tabla-rango-head" class="sticky top-0 z-20 shadow-sm" style="background:var(--ap-elevated);color:var(--ap-ink)"></thead>
 
@@ -2838,6 +2932,11 @@
 
         function cambiarVista(vista) {
 
+            if (vista !== 'suscripcion' && typeof window.__licensingIsBlocked === 'function' && window.__licensingIsBlocked()) {
+                try { if (location.pathname !== '/activacion') history.replaceState(null,'','/activacion'); } catch(e) {}
+                if (typeof licRefreshActivationStatus === 'function') licRefreshActivationStatus();
+                return;
+            }
             vistaActual = vista;
 
             const dash = document.getElementById('vista-dashboard');
@@ -2862,6 +2961,8 @@
             if (ggVista) ggVista.classList.toggle('hidden', vista !== 'gastos');
             const rptVista = document.getElementById('vista-reportes');
             if (rptVista) rptVista.classList.toggle('hidden', vista !== 'reportes');
+            const subVista = document.getElementById('vista-suscripcion');
+            if (subVista) subVista.classList.toggle('hidden', vista !== 'suscripcion');
 
             
 
@@ -2890,6 +2991,8 @@
             if (ggTab) setTab('tab-gastos', vista === 'gastos');
             const rptTab = document.getElementById('tab-reportes');
             if (rptTab) setTab('tab-reportes', vista === 'reportes');
+            const subTab = document.getElementById('tab-suscripcion');
+            if (subTab) setTab('tab-suscripcion', vista === 'suscripcion');
 
 
 
@@ -2909,6 +3012,7 @@
             if (vista === 'recetas') { inicializarComponentesReceta(); cargarRecetasPallet(); }
 
             if (vista === 'rollos-fletes') { inicializarRollosFletes(); if(typeof cpCargarStockEsperado==='function') cpCargarStockEsperado(); /* D-SP7: egresos en Pedidos/Remitos */ }
+            if (vista === 'suscripcion' && typeof licRefreshSuscripcion === 'function') licRefreshSuscripcion();
 
         }
 
@@ -3432,7 +3536,7 @@
 
 
 
-                    let rowHtml = `<tr class="fila-rango" style="border-bottom:1px solid var(--ap-border)" data-id="${emp.id}" data-fijo="${esFijo}">
+                    let rowHtml = `<tr class="fila-rango" style="border-bottom:1px solid var(--ap-border)" data-id="${emp.id}" data-fijo="${esFijo}" data-precio="${precioMuestra}" data-pres="${presMuestra}">
 
                         <td class="p-1 sticky left-0 z-10" style="background:var(--ap-elevated);border-right:1px solid var(--ap-border);box-shadow:2px 0 5px -2px rgba(0,0,0,0.3)">
 
@@ -3554,9 +3658,13 @@
 
             const idEmp = tr.dataset.id;
 
-            const valorHs = parseFloat(tr.querySelector('.input-precio').value) || 0;
+            const _inpPrecio = tr.querySelector('.input-precio');
+            const _inpPres = tr.querySelector('.input-pres');
+            const valorHs = parseFloat(_inpPrecio ? _inpPrecio.value : tr.dataset.precio) || 0;
 
-            const valorPres = parseFloat(tr.querySelector('.input-pres').value) || 0;
+            const valorPres = parseFloat(_inpPres ? _inpPres.value : tr.dataset.pres) || 0;
+            tr.dataset.precio = valorHs;
+            tr.dataset.pres = valorPres;
 
 
 
@@ -3610,9 +3718,13 @@
 
 
 
-            const valorHs = parseFloat(tr.querySelector('.input-precio').value) || 0;
+            const _inpPrecio = tr.querySelector('.input-precio');
+            const _inpPres = tr.querySelector('.input-pres');
+            const valorHs = parseFloat(_inpPrecio ? _inpPrecio.value : tr.dataset.precio) || 0;
 
-            const valorPres = parseFloat(tr.querySelector('.input-pres').value) || 0;
+            const valorPres = parseFloat(_inpPres ? _inpPres.value : tr.dataset.pres) || 0;
+            tr.dataset.precio = valorHs;
+            tr.dataset.pres = valorPres;
 
 
 
@@ -3652,9 +3764,13 @@
 
 
 
-            const valorHs = parseFloat(tr.querySelector('.input-precio').value) || 0;
+            const _inpPrecio = tr.querySelector('.input-precio');
+            const _inpPres = tr.querySelector('.input-pres');
+            const valorHs = parseFloat(_inpPrecio ? _inpPrecio.value : tr.dataset.precio) || 0;
 
-            const valorPres = parseFloat(tr.querySelector('.input-pres').value) || 0;
+            const valorPres = parseFloat(_inpPres ? _inpPres.value : tr.dataset.pres) || 0;
+            tr.dataset.precio = valorHs;
+            tr.dataset.pres = valorPres;
 
             const esFijo = tr.dataset.fijo === 'true';
 
@@ -4270,6 +4386,21 @@
             const activo = !!(window.planillaModoHistorico && window.planillaModoHistorico.activo);
             planillaSetControlesModoHistorico(activo);
             if (activo) planillaAplicarBloqueoGrillaHistorica();
+            // Forzar recálculo de layout al alternar modo (evita columnas estiradas/corte sin Ctrl+F5)
+            try {
+                const wrap = document.querySelector('.tabla-rango-container');
+                const tbl = wrap ? wrap.querySelector('table') : null;
+                if (wrap) {
+                    wrap.style.maxWidth = '100%';
+                    // invalidación de layout
+                    void wrap.offsetWidth;
+                    if (tbl) { void tbl.offsetWidth; }
+                    requestAnimationFrame(() => {
+                        if (wrap) void wrap.scrollWidth;
+                        if (tbl) void tbl.offsetWidth;
+                    });
+                }
+            } catch (e) {}
         }
         window.planillaSalirModoHistoricoYCargar = async function() {
             const sel = document.getElementById('planilla-cierre-historico');
@@ -9935,7 +10066,7 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
         const _guardarPlanillaProduccionBase = (typeof guardarPlanillaProduccion==='function') ? guardarPlanillaProduccion : null;
         window.guardarPlanillaProduccion = async function(){ var r; if(_guardarPlanillaProduccionBase) r = await _guardarPlanillaProduccionBase.apply(this, arguments); try{ if(typeof prodActualizarResumenSubproductos==='function') prodActualizarResumenSubproductos(); }catch(e){} return r; };
         const _cambiarVistaBase = (typeof cambiarVista==='function') ? cambiarVista : null;
-        window.cambiarVista = function(vista){ if(_cambiarVistaBase) try{ _cambiarVistaBase(vista); }catch(e){} if(vista==='rollos-fletes'){ try{ rfCambiarTabPrincipal('playa'); rfCargarRemanenteRollos(); }catch(e){} /* sp movido a Stock */ } if(vista==='gastos' && typeof ggInit==='function'){ try{ ggInit(); }catch(e){} } if(vista==='produccion'){ try{ if(typeof prodActualizarResumenSubproductos==='function') prodActualizarResumenSubproductos(); }catch(e){} } if(vista==='reportes'){ try{ if(typeof rptLimpiarPreview==='function') rptLimpiarPreview(); }catch(e){} } };
+        window.cambiarVista = function(vista){ if(_cambiarVistaBase) try{ _cambiarVistaBase(vista); }catch(e){} if(vista==='rollos-fletes'){ try{ rfCambiarTabPrincipal('playa'); rfCargarRemanenteRollos(); }catch(e){} /* sp movido a Stock */ } if(vista==='gastos' && typeof ggInit==='function'){ try{ ggInit(); }catch(e){} } if(vista==='produccion'){ try{ if(typeof prodActualizarResumenSubproductos==='function') prodActualizarResumenSubproductos(); }catch(e){} } if(vista==='reportes'){ try{ if(typeof rptAlEntrarVista==='function') rptAlEntrarVista(); else if(typeof rptLimpiarPreview==='function') rptLimpiarPreview(); }catch(e){} } };
 
         // =================== DASHBOARD TN/P²/TODOS (canónico, SDD dashboard-totales-tn-p2 + modern UI/charts) ===================
         let dbCharts = window.dbCharts || {}; window.dbCharts = dbCharts;
@@ -10855,22 +10986,6 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
   };
   function rptPad2(n){ return String(n).padStart(2,'0'); }
   function rptYmd(d){ return d.getUTCFullYear() + '-' + rptPad2(d.getUTCMonth()+1) + '-' + rptPad2(d.getUTCDate()); }
-  function rptBucketFin(bucketInicio, periodo){
-    var p = String(periodo||'day');
-    var s = String(bucketInicio||'').slice(0,10);
-    var m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(s);
-    if(!m) return s;
-    var y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
-    if(p === 'day') return s;
-    if(p === 'week'){
-      var dt = new Date(Date.UTC(y, mo-1, d)); dt.setUTCDate(dt.getUTCDate()+6); return rptYmd(dt);
-    }
-    if(p === 'month'){
-      var last = new Date(Date.UTC(y, mo, 0)); return rptYmd(last);
-    }
-    if(p === 'year') return y + '-12-31';
-    return s;
-  }
   function rptFmtMoney(v){ var n=Number(v); if(!isFinite(n)) n=0; try{ return '$ ' + n.toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}); }catch(e){ return '$ ' + n.toFixed(2); } }
   function rptEsc(s){ if(s==null) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function rptEnsureDetalleModal(){
@@ -10912,111 +11027,223 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
       return;
     }
   }
-  async function rptCargarDetalleBucket(bucketInicio, bucketFin, bucketLabel, aserradero, meta){
+  var _rptLastJson = null;
+  var _rptReqSeq = 0;
+  var _rptDebounceTimer = null;
+
+  function rptSetProgress(show, text){
+    var el=document.getElementById('rpt-progress'); if(!el) return;
+    el.classList.toggle('hidden', !show);
+    var t=document.getElementById('rpt-progress-text'); if(t && text) t.textContent=text;
+  }
+
+  function rptRenderFallbackDetalle(ctx){
     rptEnsureDetalleModal();
     rptAbrirDetalleModal();
     var titulo=document.getElementById('rpt-detalle-titulo');
     var sub=document.getElementById('rpt-detalle-sub');
     var body=document.getElementById('rpt-detalle-body');
-    if(titulo) titulo.textContent='Remitos del período ' + (bucketLabel || bucketInicio || '');
-    if(sub) sub.textContent='Rango: ' + (bucketInicio||'') + ' a ' + (bucketFin||'') + (aserradero ? (' · Aserradero: ' + aserradero) : '');
-    if(body) body.innerHTML='<div class="flex items-center gap-2 py-6 justify-center" style="color:var(--ap-muted,#93a197)"><span class="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span><span>Cargando remitos...</span></div>';
+    var mod = (ctx && ctx.modulo) || (ctx && ctx.meta && ctx.meta.reporte) || 'módulo';
+    var rango = (ctx && ctx.rangoTxt) || ((ctx && ctx.meta) ? ((ctx.meta.desde||'') + ' a ' + (ctx.meta.hasta||'')) : '—');
+    var aserr = (ctx && ctx.aserradero) || (ctx && ctx.meta && ctx.meta.scopeAserradero) || 'Todos';
+    if(titulo) titulo.textContent = 'Detalle — ' + mod;
+    if(sub) sub.textContent = 'Rango: ' + (rango||'—') + ' · Aserradero: ' + aserr;
+    var row = (ctx && ctx.row && typeof ctx.row==='object') ? ctx.row : null;
+    var rowsHtml = '';
+    if(row){
+      var keys = Object.keys(row);
+      rowsHtml = keys.map(function(k){
+        return '<tr class="border-b" style="border-color:var(--ap-border,rgba(232,236,230,.12))"><th class="px-3 py-2 text-left whitespace-nowrap" style="color:var(--ap-muted,#93a197)">'+rptEsc(rptHumanizeKey(k))+'</th><td class="px-3 py-2">'+rptEsc(row[k]==null?'':(typeof row[k]==='object'?JSON.stringify(row[k]):row[k]))+'</td></tr>';
+      }).join('');
+    }
+    if(body){
+      body.innerHTML =
+        '<div class="mb-3 p-3 rounded text-xs" style="background:var(--ap-elevated,#243038);border:1px solid var(--ap-border,rgba(232,236,230,.12));color:var(--ap-ink,#e8ece6)">'+
+          '<p class="font-semibold mb-1">Detalle de registros no disponible para este módulo/fila.</p>'+
+          '<p style="color:var(--ap-muted,#93a197)">Se muestran los totales/datos disponibles de la fila seleccionada (sin inventar registros).</p>'+
+        '</div>'+
+        (rowsHtml ? '<div class="overflow-auto"><table class="min-w-full text-xs"><tbody>'+rowsHtml+'</tbody></table></div>' : '<div class="text-xs" style="color:var(--ap-muted,#93a197)">Sin datos de fila disponibles.</div>');
+    }
+  }
+
+  async function rptFetchJsonPorParams(modulo, params){
+    var token = localStorage.getItem('token') || (typeof getToken==='function' ? getToken() : '') || '';
+    if(!token) throw new Error('Sesión no disponible.');
+    var base = (typeof API_URL!=='undefined' && API_URL) ? API_URL : '';
+    var url = base + '/reportes/' + encodeURIComponent(modulo) + '?' + params.toString();
+    var res = await fetch(url, { method:'GET', headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' }, cache:'no-store' });
+    if(!res.ok){
+      var msg = 'Error ' + res.status;
+      try{ var j = await res.json(); msg = (j && (j.message||j.error)) ? (Array.isArray(j.message)?j.message.join(', '):j.message) : msg; }catch(e){}
+      throw new Error(msg);
+    }
+    return await res.json();
+  }
+
+  function rptBucketCtx(row, meta){
+    var periodo = (meta && meta.periodo) || (document.getElementById('rpt-periodo')||{}).value || 'day';
+    var desde = (meta && meta.desde) || (meta && meta.rango && meta.rango.desde) || '';
+    var hasta = (meta && meta.hasta) || (meta && meta.rango && meta.rango.hasta) || '';
+    var aserr = (row && row.aserradero != null) ? String(row.aserradero) : '';
+    return { desde: desde, hasta: hasta, rangoTxt: (desde||hasta) ? ((desde||'')+' a '+(hasta||'')) : '', aserradero: aserr, periodo: periodo };
+  }
+
+  async function rptAbrirDetalle(moduloReporte, row, meta){
+    var ctx = rptBucketCtx(row, meta);
+    ctx.row = row; ctx.meta = meta || {}; ctx.modulo = moduloReporte || (meta && meta.reporte) || '';
+    var desde = ctx.desde || ''; var hasta = ctx.hasta || ''; var aserr = ctx.aserradero || '';
+    ctx.rangoTxt = (desde||hasta) ? ((desde||'') + ' a ' + (hasta||'')) : '—';
+
+    if(moduloReporte === 'ventas_remitos'){
+      rptEnsureDetalleModal(); rptAbrirDetalleModal();
+      var bodyv=document.getElementById('rpt-detalle-body'); var titulov=document.getElementById('rpt-detalle-titulo'); var subv=document.getElementById('rpt-detalle-sub');
+      if(titulov) titulov.textContent='Remitos del período';
+      if(subv) subv.textContent='Rango: '+ctx.rangoTxt+(aserr?(' · Aserradero: '+aserr):'');
+      if(bodyv) bodyv.innerHTML='<div class="flex items-center gap-2 py-6 justify-center" style="color:var(--ap-muted,#93a197)"><span class="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span><span>Cargando remitos...</span></div>';
+      try{
+        var tokenv = localStorage.getItem('token') || (typeof getToken==='function' ? getToken() : '') || '';
+        if(!tokenv) throw new Error('Sesión no disponible.');
+        var basev = (typeof API_URL!=='undefined' && API_URL) ? API_URL : '';
+        var pv = new URLSearchParams(); if(desde) pv.set('fechaDesde',desde); if(hasta) pv.set('fechaHasta',hasta);
+        if(aserr && aserr!=='Sin asignar') pv.set('aserradero',aserr);
+        var rv = await fetch(basev + '/salidas-stock?' + pv.toString(), { headers: { 'Authorization': 'Bearer ' + tokenv, 'Accept':'application/json' }, cache:'no-store' });
+        if(!rv.ok){ var msgv='Error '+rv.status; try{ var jv=await rv.json(); msgv=(jv&&(jv.message||jv.error))?(Array.isArray(jv.message)?jv.message.join(', '):jv.message):msgv; }catch(e){} throw new Error(msgv); }
+        var payloadv = await rv.json();
+        var listv = Array.isArray(payloadv) ? payloadv : (payloadv && Array.isArray(payloadv.data) ? payloadv.data : []);
+        var incluirAnulados = !!(meta && meta.incluirAnulados);
+        if(!incluirAnulados){ listv = listv.filter(function(s){ var ed=String(s.estadoDespacho||'').toUpperCase(); var es=String(s.estado||'').toUpperCase(); return ed!=='ANULADO' && es!=='ANULADA'; }); }
+        if(!listv.length){ bodyv.innerHTML='<div class="py-6 text-center" style="color:var(--ap-muted,#93a197)">No hay remitos para este período.</div>'; return; }
+        var rowsv = listv.map(function(s){
+          var num = s.remitoFisicoNumero || s.numeroRemito || ('#'+s.id);
+          var cli = s.clienteNombre || '-'; var fec = s.fecha || ''; var est = s.estadoDespacho || s.estado || '-';
+          var disabled = (typeof verRemito !== 'function');
+          var link = '<button type="button" data-rpt-remito-id="'+rptEsc(s.id)+'" class="rpt-remito-link underline font-semibold" style="color:var(--ap-info,#7dd3fc)" '+(disabled?'disabled':'')+'>'+rptEsc(num)+'</button>';
+          return '<tr class="border-b" style="border-color:var(--ap-border,rgba(232,236,230,.12))">'+
+            '<td class="px-3 py-2 whitespace-nowrap">'+link+'</td>'+
+            '<td class="px-3 py-2">'+rptEsc(cli)+'</td>'+
+            '<td class="px-3 py-2 whitespace-nowrap">'+rptEsc(fec)+'</td>'+
+            '<td class="px-3 py-2 whitespace-nowrap">'+rptEsc(est)+'</td>'+
+            '<td class="px-3 py-2 text-right whitespace-nowrap">'+rptFmtMoney(s.subtotalNeto)+'</td>'+
+            '<td class="px-3 py-2 text-right whitespace-nowrap">'+rptFmtMoney(s.ivaMonto)+'</td>'+
+            '<td class="px-3 py-2 text-right font-semibold whitespace-nowrap">'+rptFmtMoney(s.total)+'</td>'+
+          '</tr>';
+        }).join('');
+        bodyv.innerHTML='<div class="text-xs mb-2" style="color:var(--ap-muted,#93a197)">'+listv.length+' remito(s) · Rango del reporte. Click en Nº para ver detalle.</div>'+
+          '<div class="overflow-auto"><table class="min-w-full text-xs"><thead><tr style="background:var(--ap-elevated,#243038)">'+
+          '<th class="px-3 py-2 text-left">Nº Comprobante/Remito</th><th class="px-3 py-2 text-left">Cliente</th><th class="px-3 py-2 text-left">Fecha</th><th class="px-3 py-2 text-left">Estado</th>'+
+          '<th class="px-3 py-2 text-right">Subtotal Neto</th><th class="px-3 py-2 text-right">IVA</th><th class="px-3 py-2 text-right">Total</th>'+
+          '</tr></thead><tbody>'+rowsv+'</tbody></table></div>';
+        Array.prototype.forEach.call(bodyv.querySelectorAll('.rpt-remito-link'), function(btn){
+          btn.addEventListener('click', function(ev){ ev.preventDefault(); ev.stopPropagation(); var rid=btn.getAttribute('data-rpt-remito-id'); if(rid) rptVerRemitoDesdeDetalle(rid); });
+        });
+      }catch(err){ rptRenderFallbackDetalle(ctx); }
+      return;
+    }
+
+    if(moduloReporte === 'produccion' || moduloReporte === 'pallets_produccion' || moduloReporte === 'empleados'){
+      return rptRenderFallbackDetalle(ctx);
+    }
+
+    rptEnsureDetalleModal(); rptAbrirDetalleModal();
+    var body=document.getElementById('rpt-detalle-body'); var titulo=document.getElementById('rpt-detalle-titulo'); var sub=document.getElementById('rpt-detalle-sub');
+    if(titulo) titulo.textContent = 'Detalle — ' + moduloReporte;
+    if(sub) sub.textContent = 'Rango: ' + (ctx.rangoTxt||'—') + (aserr?(' · Aserradero: '+aserr):'');
+    if(body) body.innerHTML='<div class="flex items-center gap-2 py-6 justify-center" style="color:var(--ap-muted,#93a197)"><span class="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span><span>Cargando detalle...</span></div>';
     try{
       var token = localStorage.getItem('token') || (typeof getToken==='function' ? getToken() : '') || '';
       if(!token) throw new Error('Sesión no disponible.');
       var base = (typeof API_URL!=='undefined' && API_URL) ? API_URL : '';
-      var params = new URLSearchParams();
-      params.set('fechaDesde', bucketInicio);
-      params.set('fechaHasta', bucketFin);
-      if(aserradero && aserradero !== 'Sin asignar') params.set('aserradero', aserradero);
-      var url = base + '/salidas-stock?' + params.toString();
-      var res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token, 'Accept':'application/json' }, cache:'no-store' });
-      if(!res.ok){
-        var msg='Error ' + res.status;
-        try{ var j=await res.json(); msg=(j&&(j.message||j.error))?(Array.isArray(j.message)?j.message.join(', '):j.message):msg; }catch(e){}
-        throw new Error(msg);
+      var list = null, cols = null;
+      if(moduloReporte === 'gastos'){
+        var p = new URLSearchParams(); if(desde) p.set('fechaDesde',desde); if(hasta) p.set('fechaHasta',hasta);
+        var rg = await fetch(base + '/gastos?' + p.toString(),{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'},cache:'no-store'}); if(!rg.ok) throw new Error('Error '+rg.status);
+        var pg = await rg.json(); list = Array.isArray(pg) ? pg : (pg && Array.isArray(pg.items) ? pg.items : (pg && Array.isArray(pg.data) ? pg.data : []));
+        cols = ['fecha','concepto','rubroId','proveedorId','monto','estado','aserraderoId'];
+      } else if(moduloReporte === 'rollos_ingresos'){
+        var pr = new URLSearchParams(); if(desde) pr.set('fechaDesde',desde); if(hasta) pr.set('fechaHasta',hasta); if(aserr && aserr!=='Sin asignar') pr.set('aserradero',aserr);
+        var rr = await fetch(base + '/ingreso-rollos?' + pr.toString(),{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'},cache:'no-store'}); if(!rr.ok) throw new Error('Error '+rr.status);
+        var jr = await rr.json(); list = Array.isArray(jr) ? jr : (jr && Array.isArray(jr.items) ? jr.items : (jr && Array.isArray(jr.data) ? jr.data : []));
+        cols = ['fecha','nroRemito','proveedorMaderaId','fleteroId','toneladas','m3','aserradero'];
+      } else if(moduloReporte === 'cc_fleteros'){
+        var pc = new URLSearchParams(); if(desde) pc.set('desde',desde); if(hasta) pc.set('hasta',hasta);
+        var rc = await fetch(base + '/cuenta-corriente-fleteros/movimientos?' + pc.toString(),{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'},cache:'no-store'}); if(!rc.ok) throw new Error('Error '+rc.status);
+        var jc = await rc.json(); list = Array.isArray(jc) ? jc : (jc && Array.isArray(jc.items) ? jc.items : (jc && Array.isArray(jc.data) ? jc.data : []));
+        if(row && row.fletero_id!=null){ list = list.filter(function(x){ return String(x.fleteroId||'')===String(row.fletero_id); }); }
+        cols = ['fecha','tipo','fleteroId','monto','concepto','medio'];
+      } else if(moduloReporte === 'rrhh_partes_diarios'){
+        var rp = await fetch(base + '/partes-diarios',{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'},cache:'no-store'}); if(!rp.ok) throw new Error('Error '+rp.status);
+        var jp = await rp.json(); list = Array.isArray(jp) ? jp : (jp && Array.isArray(jp.items) ? jp.items : (jp && Array.isArray(jp.data) ? jp.data : []));
+        if(desde){ list = list.filter(function(x){ var f=String((x&& (x.fecha||x.fechaParte||x.createdAt))||'').slice(0,10); return !f || f >= desde; }); }
+        if(hasta){ list = list.filter(function(x){ var f=String((x&& (x.fecha||x.fechaParte||x.createdAt))||'').slice(0,10); return !f || f <= hasta; }); }
+        if(row && row.empleado_id!=null){ list = list.filter(function(x){ return String(x.empleadoId!=null?x.empleadoId:(x.empleado&&x.empleado.id))===String(row.empleado_id); }); }
+        if(aserr && aserr!=='Sin asignar'){ list = list.filter(function(x){ var a=(x.empleado&&x.empleado.aserradero)||x.aserradero||''; return !a || String(a)===aserr; }); }
+        list = list.map(function(x){ var e=x.empleado||{}; return Object.assign({}, x, { empleadoNombre: e.nombreCompleto || x.empleadoNombre || x.empleado_id || '', aserradero: e.aserradero || x.aserradero || '' }); });
+        cols = ['fecha','empleadoNombre','aserradero','horasTrabajadas','montoExtra','palletsFabricados','camionesCargados','turnosLimpieza','liquidado','detalleExtra'];
+      } else if(moduloReporte === 'subproductos'){
+        var ps = new URLSearchParams(); if(desde) ps.set('desde',desde); if(hasta) ps.set('hasta',hasta); if(aserr && aserr!=='Sin asignar') ps.set('aserradero',aserr);
+        var rs = await fetch(base + '/conciliacion/subproductos-egresos?' + ps.toString(),{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'},cache:'no-store'}); if(!rs.ok) throw new Error('Error '+rs.status);
+        var js = await rs.json(); list = Array.isArray(js) ? js : (js && Array.isArray(js.items) ? js.items : (js && Array.isArray(js.data) ? js.data : []));
+        if(row && row.tipo){ list = list.filter(function(x){ return String(x.tipo||'')===String(row.tipo); }); }
+        cols = ['fecha','tipo','especieDeclarada','tnEstimadas','tnReales','precioPorTn','aserradero'];
+      } else {
+        return rptRenderFallbackDetalle(ctx);
       }
-      var payload = await res.json();
-      var list = Array.isArray(payload) ? payload : (payload && Array.isArray(payload.data) ? payload.data : []);
-      var incluirAnulados = !!(meta && meta.incluirAnulados);
-      if(!incluirAnulados){
-        list = list.filter(function(s){ var ed=String(s.estadoDespacho||'').toUpperCase(); var es=String(s.estado||'').toUpperCase(); return ed!=='ANULADO' && es!=='ANULADA'; });
-      }
-      if(!list.length){ body.innerHTML='<div class="py-6 text-center" style="color:var(--ap-muted,#93a197)">No hay remitos para este período.</div>'; return; }
-      var rows = list.map(function(s){
-        var num = s.remitoFisicoNumero || s.numeroRemito || ('#'+s.id);
-        var cli = s.clienteNombre || '-';
-        var fec = s.fecha || '';
-        var est = s.estadoDespacho || s.estado || '-';
-        var st = String(est).toUpperCase();
-        var disabled = (typeof verRemito !== 'function');
-        var link = '<button type="button" data-rpt-remito-id="'+rptEsc(s.id)+'" class="rpt-remito-link underline font-semibold" style="color:var(--ap-info,#7dd3fc)" '+(disabled?'disabled':'')+'>'+rptEsc(num)+'</button>';
-        return '<tr class="border-b" style="border-color:var(--ap-border,rgba(232,236,230,.12))">'+
-          '<td class="px-3 py-2 whitespace-nowrap">'+link+'</td>'+
-          '<td class="px-3 py-2">'+rptEsc(cli)+'</td>'+
-          '<td class="px-3 py-2 whitespace-nowrap">'+rptEsc(fec)+'</td>'+
-          '<td class="px-3 py-2 whitespace-nowrap">'+rptEsc(est)+'</td>'+
-          '<td class="px-3 py-2 text-right whitespace-nowrap">'+rptFmtMoney(s.subtotalNeto)+'</td>'+
-          '<td class="px-3 py-2 text-right whitespace-nowrap">'+rptFmtMoney(s.ivaMonto)+'</td>'+
-          '<td class="px-3 py-2 text-right font-semibold whitespace-nowrap">'+rptFmtMoney(s.total)+'</td>'+
-        '</tr>';
+      if(!Array.isArray(list) || list.length===0){ return rptRenderFallbackDetalle(ctx); }
+      var keys = cols ? cols.filter(function(k){ return list.some(function(it){ return it && it[k]!==undefined && it[k]!==null && it[k]!==''; }); }) : Object.keys(list[0]||{});
+      if(!keys.length) keys = Object.keys(list[0]||{}).slice(0,8);
+      var head = keys.map(function(k){ return '<th class="px-3 py-2 text-left whitespace-nowrap">'+rptEsc(rptHumanizeKey(k))+'</th>'; }).join('');
+      var rows = list.slice(0,200).map(function(it){
+        return '<tr class="border-b" style="border-color:var(--ap-border,rgba(232,236,230,.12))">'+keys.map(function(k){ var v=it?it[k]:''; return '<td class="px-3 py-2">'+rptEsc(v==null?'':(typeof v==='object'?JSON.stringify(v):v))+'</td>'; }).join('')+'</tr>';
       }).join('');
-      body.innerHTML='<div class="text-xs mb-2" style="color:var(--ap-muted,#93a197)">'+list.length+' remito(s) · Click en Nº para ver detalle'+(typeof verRemito!=='function'?' (vista de remito no disponible en este contexto)':'')+'</div>'+
-        '<div class="overflow-auto"><table class="min-w-full text-xs"><thead><tr style="background:var(--ap-elevated,#243038)">'+
-        '<th class="px-3 py-2 text-left">Nº Comprobante/Remito</th><th class="px-3 py-2 text-left">Cliente</th><th class="px-3 py-2 text-left">Fecha</th><th class="px-3 py-2 text-left">Estado</th>'+
-        '<th class="px-3 py-2 text-right">Subtotal Neto</th><th class="px-3 py-2 text-right">IVA</th><th class="px-3 py-2 text-right">Total</th>'+
-        '</tr></thead><tbody>'+rows+'</tbody></table></div>';
-      Array.prototype.forEach.call(body.querySelectorAll('.rpt-remito-link'), function(btn){
-        btn.addEventListener('click', function(ev){ ev.preventDefault(); ev.stopPropagation(); var rid=btn.getAttribute('data-rpt-remito-id'); if(rid) rptVerRemitoDesdeDetalle(rid); });
-      });
-    }catch(err){
-      body.innerHTML='<div class="py-6 text-center" style="color:var(--ap-ember,#f87171)">No se pudo cargar el detalle: '+rptEsc((err&&err.message)||err)+'</div>';
-    }
+      body.innerHTML = '<div class="text-xs mb-2" style="color:var(--ap-muted,#93a197)">'+list.length+' registro(s)'+(list.length>200?' (mostrando 200)':'')+' · Rango del reporte.</div>'+
+        '<div class="overflow-auto"><table class="min-w-full text-xs"><thead><tr style="background:var(--ap-elevated,#243038)">'+head+'</tr></thead><tbody>'+rows+'</tbody></table></div>';
+    }catch(err){ rptRenderFallbackDetalle(ctx); }
   }
+
   function rptRenderPreview(json){
+    _rptLastJson = json || null;
     var table=document.getElementById('rpt-preview-table'); if(!table) return;
     var detalle = (json && Array.isArray(json.detalle)) ? json.detalle : [];
     var totales = (json && json.totales && typeof json.totales==='object') ? json.totales : null;
     var meta = (json && json.meta && typeof json.meta==='object') ? json.meta : {};
     var thead=document.createElement('thead'); var hr=document.createElement('tr');
     var tbody=document.createElement('tbody');
+    var reporteKey = String(meta.reporte || (document.getElementById('rpt-modulo')||{}).value || '');
     if(detalle.length > 0){
       var keys = Object.keys(detalle[0]||{});
       keys.forEach(function(k){ hr.appendChild(rptTh(rptHumanizeKey(k))); });
       thead.appendChild(hr);
-      var drillable = (String(meta.reporte||'') === 'ventas_remitos');
       detalle.forEach(function(row){
         var tr=document.createElement('tr');
-        var isDrill = drillable && row && row.bucket_inicio;
-        tr.className = isDrill ? 'hover:bg-gray-700 cursor-pointer' : 'hover:bg-gray-800';
-        if(isDrill){
-          tr.title = 'Click para ver remitos del período';
-          tr.setAttribute('tabindex','0');
-          tr.setAttribute('role','button');
-          var bi = String(row.bucket_inicio||'').slice(0,10);
-          var bf = rptBucketFin(bi, meta.periodo || 'day');
-          var bl = row.bucket || (bi + ' a ' + bf);
-          var aserr = (row.aserradero != null ? String(row.aserradero) : '');
-          var handler = function(){ rptCargarDetalleBucket(bi, bf, bl, aserr, meta); };
-          tr.addEventListener('click', handler);
-          tr.addEventListener('keydown', function(e){ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); handler(); } });
-        }
+        tr.className = 'hover:bg-gray-700 cursor-pointer';
+        tr.title = 'Click para ver detalle';
+        tr.setAttribute('tabindex','0');
+        tr.setAttribute('role','button');
+        var handler = function(){ rptAbrirDetalle(reporteKey, row, meta); };
+        tr.addEventListener('click', handler);
+        tr.addEventListener('keydown', function(e){ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); handler(); } });
         keys.forEach(function(k){ tr.appendChild(rptTd(row?row[k]:'')); });
         tbody.appendChild(tr);
       });
       rptSetTable(table, thead, tbody); rptMostrarPreview(true);
-      rptMsg('Mostrando ' + detalle.length + ' fila(s) - ' + (meta.reporte||'reporte') + (drillable ? '. Click en una fila para ver remitos.' : '.') );
+      rptMsg('Mostrando ' + detalle.length + ' fila(s) - ' + (reporteKey||'reporte') + '. Click en una fila para ver detalle.');
       return;
     }
     if(totales && Object.keys(totales).length > 0){
       var tkeys = Object.keys(totales);
       tkeys.forEach(function(k){ hr.appendChild(rptTh(rptHumanizeKey(k))); });
       thead.appendChild(hr);
-      var trt=document.createElement('tr'); trt.className='hover:bg-gray-800';
+      var trt=document.createElement('tr'); trt.className='hover:bg-gray-700 cursor-pointer';
+      trt.title = 'Click para ver detalle';
+      trt.setAttribute('tabindex','0'); trt.setAttribute('role','button');
+      var rowT = Object.assign({}, totales);
+      var handlerT = function(){ rptAbrirDetalle(reporteKey, rowT, meta); };
+      trt.addEventListener('click', handlerT);
+      trt.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); handlerT(); } });
       tkeys.forEach(function(k){ trt.appendChild(rptTd(totales[k], true)); });
       tbody.appendChild(trt);
       rptSetTable(table, thead, tbody); rptMostrarPreview(true);
-      rptMsg('Sin detalle en el período; mostrando totales.');
+      rptMsg('Sin detalle en el período; mostrando totales. Click para ver detalle.');
       return;
     }
     rptSetTable(table, null, null); rptMostrarPreview(true);
@@ -11031,10 +11258,8 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
     el.classList.toggle('hidden', !show);
   }
 
-  function rptActualizarCampos(){
+  function rptActualizarCampos(opts){
     var periodo = (document.getElementById('rpt-periodo')||{}).value || 'month';
-    var modulo = (document.getElementById('rpt-modulo')||{}).value || '';
-    var esTurnos = modulo === 'turnos';
     var esSemana = periodo === 'week';
     var esMes = periodo === 'month';
     var esDia = periodo === 'day';
@@ -11045,7 +11270,6 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
     rptShow('rpt-wrap-anio', esAnio);
     rptShow('rpt-wrap-desde', esSemana);
     rptShow('rpt-wrap-hasta', esSemana);
-    rptShow('rpt-wrap-turno', esTurnos);
 
     var fecha = document.getElementById('rpt-fecha');
     var mes = document.getElementById('rpt-mes');
@@ -11060,10 +11284,9 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
     if(hasta){ hasta.required = esSemana; hasta.disabled = !esSemana; }
 
     if(esSemana){
-      // Autocompletar lunes y domingo de la semana actual al seleccionar período semana
       var sem = rptSemanaActual();
-      if(desde) desde.value = sem.desde;
-      if(hasta) hasta.value = sem.hasta;
+      if(desde && !desde.value) desde.value = sem.desde;
+      if(hasta && !hasta.value) hasta.value = sem.hasta;
     }
     if(esMes && mes && !mes.value){
       try{ mes.value = new Date().toISOString().slice(0,7); }catch(e){}
@@ -11071,6 +11294,7 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
     if(esAnio && anio && !anio.value){
       try{ anio.value = String(new Date().getFullYear()); }catch(e){}
     }
+    if(!(opts && opts.skipAuto)) rptSchedulePreview(0);
   }
 
   function rptBuildParams(format){
@@ -11080,16 +11304,15 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
     var mes = (document.getElementById('rpt-mes')||{}).value || '';
     var desde = (document.getElementById('rpt-desde')||{}).value || '';
     var hasta = (document.getElementById('rpt-hasta')||{}).value || '';
-    var turno = (document.getElementById('rpt-turno')||{}).value || '';
 
-    if(!modulo){ return { error: 'Seleccioná módulo.' }; }
+    if(!modulo){ return { error: 'Seleccioná un módulo.' }; }
     var params = new URLSearchParams();
     params.set('periodo', periodo);
     params.set('format', format);
 
     if(periodo === 'week'){
       if(!desde || !hasta){ return { error: 'Seleccioná el rango de días (desde y hasta) para la semana.' }; }
-      if(desde > hasta){ return { error: 'El rango es inválido: "Desde" no puede ser mayor que "Hasta".' }; }
+      if(desde > hasta){ return { error: 'El rango es inválido: Desde no puede ser mayor que Hasta.' }; }
       params.set('desde', desde);
       params.set('hasta', hasta);
       params.set('fecha', desde);
@@ -11106,36 +11329,65 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
       params.set('fecha', fecha);
     }
 
-    if(modulo === 'turnos' && turno){ params.set('turno', turno); }
     return { modulo: modulo, params: params, periodo: periodo, fecha: params.get('fecha') || fecha || mes || desde };
   }
-
-  window.rptPrevisualizarJson = async function(ev){
-    if(ev && ev.preventDefault) ev.preventDefault();
+  async function rptCargarPreview(opts){
     var built = rptBuildParams('json');
     if(built.error){ rptMsg(built.error, true); return; }
     var token = localStorage.getItem('token') || (typeof getToken==='function' ? getToken() : '') || '';
     if(!token){ rptMsg('Sesión no disponible. Volvé a iniciar sesión.', true); return; }
+    var seq = ++_rptReqSeq;
     var base = (typeof API_URL!=='undefined' && API_URL) ? API_URL : '';
     var url = base + '/reportes/' + encodeURIComponent(built.modulo) + '?' + built.params.toString();
-    var btn = document.getElementById('rpt-btn-ver');
     try{
-      if(btn){ btn.disabled=true; btn.setAttribute('aria-busy','true'); btn.textContent='Cargando...'; }
       rptMsg('Consultando reporte...');
       var res = await fetch(url, { method:'GET', headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' }, cache:'no-store' });
+      if(seq !== _rptReqSeq) return;
       if(!res.ok){
         var msg = 'Error ' + res.status;
         try{ var j = await res.json(); msg = (j && (j.message||j.error)) ? (Array.isArray(j.message)?j.message.join(', '):j.message) : msg; }catch(e){}
         throw new Error(msg);
       }
       var json = await res.json();
+      if(seq !== _rptReqSeq) return;
       rptRenderPreview(json||{});
     }catch(err){
+      if(seq !== _rptReqSeq) return;
       window.rptLimpiarPreview();
       rptMsg('No se pudo cargar la vista previa: ' + ((err&&err.message)||err), true);
-    }finally{
-      if(btn){ btn.disabled=false; btn.removeAttribute('aria-busy'); btn.textContent='Ver en Pantalla'; }
     }
+  }
+
+  function rptSchedulePreview(delay){
+    if(_rptDebounceTimer) clearTimeout(_rptDebounceTimer);
+    var d = (typeof delay === 'number') ? delay : 300;
+    _rptDebounceTimer = setTimeout(function(){ rptCargarPreview(); }, d);
+  }
+
+  window.rptCargarPreview = rptCargarPreview;
+  window.rptSchedulePreview = rptSchedulePreview;
+  window.rptPrevisualizarJson = function(ev){ if(ev&&ev.preventDefault) ev.preventDefault(); if(_rptDebounceTimer) clearTimeout(_rptDebounceTimer); rptCargarPreview(); };
+
+  function rptBindAutoRefresh(){
+    var ids = ['rpt-modulo','rpt-periodo','rpt-fecha','rpt-mes','rpt-anio','rpt-desde','rpt-hasta'];
+    ids.forEach(function(id){
+      var el=document.getElementById(id); if(!el || el._rptBound) return; el._rptBound = true;
+      var deb = (el.tagName === 'INPUT' && (el.type==='date' || el.type==='month' || el.type==='number'));
+      el.addEventListener('change', function(){
+        if(id==='rpt-modulo' || id==='rpt-periodo'){ rptActualizarCampos({skipAuto:true}); rptSchedulePreview(0); }
+        else { rptSchedulePreview(0); }
+      });
+      el.addEventListener('input', function(){
+        if(id==='rpt-modulo' || id==='rpt-periodo'){ rptActualizarCampos({skipAuto:true}); }
+        rptSchedulePreview(deb ? 300 : 0);
+      });
+    });
+  }
+
+  window.rptAlEntrarVista = function(){
+    try{ rptActualizarCampos({skipAuto:true}); }catch(e){}
+    rptBindAutoRefresh();
+    rptSchedulePreview(0);
   };
 
   function rptInit(){
@@ -11145,12 +11397,8 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
     if(m && !m.value){ try{ m.value=new Date().toISOString().slice(0,7); }catch(e){} }
     var a=document.getElementById('rpt-anio');
     if(a && !a.value){ try{ a.value=String(new Date().getFullYear()); }catch(e){} }
-    var periodoSel=document.getElementById('rpt-periodo');
-    var moduloSel=document.getElementById('rpt-modulo');
-    if(periodoSel){ periodoSel.addEventListener('change', rptActualizarCampos); }
-    if(moduloSel){ moduloSel.addEventListener('change', rptActualizarCampos); }
-    rptActualizarCampos();
-    // Admin UX: ocultar tab si no es admin (BE es fuente de verdad; 401/403 se muestran)
+    rptBindAutoRefresh();
+    rptActualizarCampos({skipAuto:true});
     try{
       var rol=localStorage.getItem('rol');
       var esAdmin = (rol==='admin' || (typeof esAdministradorGeneral==='function' && esAdministradorGeneral()));
@@ -11194,233 +11442,236 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
     }
   };
 
+  function rptRenderDetalleTabla(detalle, totales){
+    var det = Array.isArray(detalle) ? detalle : [];
+    if(det.length){
+      var keys = Object.keys(det[0]||{});
+      var head = keys.map(function(k){ return '<th>'+rptEsc(rptHumanizeKey(k))+'</th>'; }).join('');
+      var rows = det.slice(0,300).map(function(r){ return '<tr>'+keys.map(function(k){ var v=r?r[k]:''; return '<td>'+rptEsc(v==null?'':(typeof v==='object'?JSON.stringify(v):v))+'</td>'; }).join('')+'</tr>'; }).join('');
+      return '<div style="overflow:auto"><table class="rpt-print-table"><thead><tr>'+head+'</tr></thead><tbody>'+rows+'</tbody></table></div>'+(det.length>300?'<div style="font-size:10px;color:#555;margin-top:4px">Mostrando 300 de '+det.length+' filas.</div>':'');
+    }
+    if(totales && typeof totales==='object' && Object.keys(totales).length){
+      var tk = Object.keys(totales);
+      var h2 = tk.map(function(k){ return '<th>'+rptEsc(rptHumanizeKey(k))+'</th>'; }).join('');
+      var r2 = '<tr>'+tk.map(function(k){ return '<td>'+rptEsc(totales[k])+'</td>'; }).join('')+'</tr>';
+      return '<div style="overflow:auto"><table class="rpt-print-table"><thead><tr>'+h2+'</tr></thead><tbody>'+r2+'</tbody></table></div><div style="font-size:10px;color:#555;margin-top:4px">Totales (sin detalle).</div>';
+    }
+    return '<div style="font-size:11px;color:#555">Sin datos para este módulo/período.</div>';
+  }
+
+  function rptYield(fn){ if(window.requestAnimationFrame){ requestAnimationFrame(function(){ setTimeout(fn,0); }); } else { setTimeout(fn,0); } }
+
+  window.rptImprimirReporteCompleto = async function(ev){
+    if(ev && ev.preventDefault) ev.preventDefault();
+    var built = rptBuildParams('json');
+    if(built.error){ rptMsg(built.error, true); return; }
+    var modulos = [
+      {id:'produccion', label:'Producción'},
+      {id:'ventas', label:'Ventas'},
+      {id:'gastos', label:'Gastos'},
+      {id:'rollos', label:'Rollos'},
+      {id:'fleteros', label:'Fleteros (CC)'},
+      {id:'rrhh-partes', label:'RRHH Partes'},
+      {id:'empleados', label:'Empleados'},
+      {id:'subproductos', label:'Subproductos'},
+      {id:'pallets', label:'Pallets'}
+    ];
+    var root = document.getElementById('rpt-print-root');
+    var btn = document.getElementById('rpt-btn-imprimir');
+    if(!root){ rptMsg('No se encontró contenedor de impresión.', true); return; }
+    var periodo = (document.getElementById('rpt-periodo')||{}).value || built.periodo || '';
+    var rangoTxt = (built.params && (built.params.get('desde')||built.params.get('fecha')||'')) || '';
+    try{
+      if(btn){ btn.disabled=true; btn.textContent='Generando...'; }
+      rptSetProgress(true, 'Generando sección 0 de 9...');
+      root.innerHTML = '';
+      var results = [];
+      for(var i=0;i<modulos.length;i+=3){
+        var chunk = modulos.slice(i,i+3);
+        rptSetProgress(true, 'Generando sección ' + (i+1) + ' de ' + modulos.length + '...');
+        var promises = chunk.map(function(m){
+          var p = new URLSearchParams(built.params.toString()); p.set('format','json');
+          return rptFetchJsonPorParams(m.id, p).then(function(json){ return {m:m, ok:true, json:json}; }).catch(function(err){ return {m:m, ok:false, error:(err&&err.message)||String(err)}; });
+        });
+        var settled = await Promise.allSettled(promises);
+        settled.forEach(function(r){ if(r.status==='fulfilled') results.push(r.value); else results.push({m:{id:'?',label:'?'}, ok:false, error:'Error inesperado'}); });
+      }
+      var idx = 0;
+      var header = '<div class="rpt-print-cover"><h1 style="margin:0 0 4px 0;font-size:20px;">Reporte completo — Aserradero</h1>'+
+        '<div style="font-size:12px;color:#333">Período: <strong>'+rptEsc(periodo)+'</strong> · Referencia/rango: <strong>'+rptEsc(rangoTxt+(built.params.get('hasta')?(' a '+built.params.get('hasta')):''))+'</strong></div>'+
+        '<div style="font-size:11px;color:#555">Generado: '+rptEsc(new Date().toLocaleString('es-AR'))+' · Módulos: 9</div></div>';
+      root.innerHTML = header;
+      await new Promise(function(resolve){
+        function step(){
+          if(idx >= results.length){ resolve(); return; }
+          var r = results[idx];
+          rptSetProgress(true, 'Generando sección ' + (idx+1) + ' de ' + modulos.length + '...');
+          var sec = document.createElement('section');
+          sec.className = 'rpt-print-section';
+          var title = '<h2 style="font-size:15px;margin:12px 0 6px 0;border-bottom:1px solid #ddd;padding-bottom:3px">'+rptEsc((r.m&&r.m.label)||'Módulo')+'</h2>';
+          if(r.ok){
+            var meta = (r.json && r.json.meta) || {};
+            var rango = meta.rango ? ((meta.rango.desde||'') + ' a ' + (meta.rango.hasta||'')) : '';
+            var metaHtml = '<div style="font-size:10px;color:#555;margin-bottom:4px">Rango: '+rptEsc(rango||'—')+'</div>';
+            sec.innerHTML = title + metaHtml + rptRenderDetalleTabla(r.json && r.json.detalle, r.json && r.json.totales);
+          } else {
+            sec.innerHTML = title + '<div style="font-size:11px;color:#b91c1c">No se pudo obtener este módulo: '+rptEsc(r.error||'error')+'</div>';
+          }
+          root.appendChild(sec);
+          idx++;
+          rptYield(step);
+        }
+        rptYield(step);
+      });
+      rptSetProgress(false);
+      root.classList.remove('hidden');
+      rptMsg('Reporte completo generado (9 módulos). Abriendo impresión...');
+      setTimeout(function(){ try{ window.print(); }catch(e){} }, 150);
+    }catch(err){
+      rptSetProgress(false);
+      rptMsg('No se pudo generar el reporte completo: ' + ((err&&err.message)||err), true);
+    }finally{
+      if(btn){ btn.disabled=false; btn.textContent='Imprimir reporte completo'; }
+    }
+  };
+
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', rptInit); else rptInit();
 })();
 </script>
 <script>
-(function () {
+(function(){
   'use strict';
-  var root = document.getElementById('licensing-banner-root');
-  if (!root) return;
-  var state = { lastKey: null, timer: null, inFlight: false };
-
-  function esc(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  var setupState = { status: null, inFlight: false, timer: null };
+  function $(id){ return document.getElementById(id); }
+  function showSetup(show){
+    var v = $('vista-setup');
+    if(!v) return;
+    if(show){ v.classList.remove('hidden'); v.style.display='block'; }
+    else { v.classList.add('hidden'); v.style.display='none'; }
   }
-  function fmtDate(iso) {
-    if (!iso) return null;
-    try { var d = new Date(iso); return isNaN(d.getTime()) ? null : d.toLocaleString('es-AR'); } catch (e) { return null; }
+  function updateUrls(st){
+    var pub = (st && (st.publicUrl || st.tunnelUrl)) || '';
+    var local = (st && st.localUrl) || ('http://localhost:' + ((st && st.appPort) || 3000));
+    var sp = $('setup-public-url'); if(sp) sp.value = pub || 'No disponible (el túnel puede tardar unos instantes en iniciar)';
+    var sl = $('setup-local-url'); if(sl) sl.value = local;
+    var subP = $('sub-tunnel-url'); if(subP) subP.value = pub || 'No disponible';
+    var subL = $('sub-local-url'); if(subL) subL.value = local;
   }
-  function token() {
-    try { return localStorage.getItem('token') || ''; } catch (e) { return ''; }
+  async function fetchSetupStatus(){
+    try{
+      var res = await fetch('/installation/setup-status', { method:'GET', headers:{'Accept':'application/json'}, cache:'no-store' });
+      if(!res.ok) return null;
+      return await res.json();
+    }catch(e){ return null; }
   }
-  function injectStyles() {
-    if (document.getElementById('licensing-banner-style')) return;
-    var st = document.createElement('style');
-    st.id = 'licensing-banner-style';
-    st.textContent = ''
-      + '#licensing-banner-root{position:fixed;top:10px;left:10px;right:10px;z-index:10050;display:flex;flex-direction:column;gap:8px;pointer-events:none;}'
-      + '.lic-banner{pointer-events:auto;border:1px solid var(--ap-border-strong,rgba(232,236,230,.2));border-left:4px solid var(--ap-forest,#34d399);background:var(--ap-elevated,#243038);color:var(--ap-ink,#e8ece6);box-shadow:0 10px 30px rgba(0,0,0,.35);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.35;display:flex;gap:10px;align-items:flex-start;}'
-      + '.lic-banner--warn{border-left-color:#f59e0b;}'
-      + '.lic-banner--danger{border-left-color:var(--ap-danger,#f87171);}'
-      + '.lic-banner--info{border-left-color:#38bdf8;}'
-      + '.lic-banner__body{flex:1;min-width:0;}'
-      + '.lic-banner__title{font-weight:700;margin:0 0 2px 0;font-size:12px;}'
-      + '.lic-banner__meta{margin:0;color:var(--ap-muted,#93a197);font-size:11px;}'
-      + '.lic-banner__actions{display:flex;gap:6px;flex-shrink:0;}'
-      + '.lic-banner__btn{background:transparent;color:var(--ap-ink,#e8ece6);border:1px solid var(--ap-border,rgba(232,236,230,.12));border-radius:6px;padding:3px 8px;cursor:pointer;font-size:11px;}'
-      + '.lic-banner__btn:hover{background:rgba(255,255,255,.06);}'
-      + '@media (max-width:640px){#licensing-banner-root{left:8px;right:8px;top:8px;}.lic-banner{padding:9px 10px;}}';
-    document.head.appendChild(st);
-  }
-
-  function deriveBanners(status) {
-    if (!status || typeof status !== 'object') return [];
-    var out = [];
-    var st = String(status.licenseStatus || '').toUpperCase();
-    var mode = String(status.enforcementMode || '');
-    var blocked = !!status.blocked;
-    var tamper = !!status.clockTamperSuspected;
-    var upd = status.updateAvailableVersion ? String(status.updateAvailableVersion) : '';
-    var vu = fmtDate(status.validUntil);
-    var grace = fmtDate(status.graceDeadlineAt);
-    var err = status.lastError ? String(status.lastError) : '';
-
-    if (!st && !err && !upd) {
-      out.push({ sev: 'warn', title: 'Licencia: sin configurar/verificar', meta: 'Estado de licencia no disponible aún. Si corresponde, un administrador puede ejecutar activación/verificación.' + (mode ? (' Modo: ' + mode + '.') : '') });
-    } else if (blocked || st === 'EXPIRED' || st === 'REVOKED' || st === 'SUSPENDED' || st === 'NOT_FOUND') {
-      var title = 'Licencia: ' + (st || 'bloqueada');
-      var meta = [];
-      if (status.blockReason) meta.push(String(status.blockReason));
-      if (vu) meta.push('Vencimiento: ' + vu);
-      if (grace) meta.push('Gracia hasta: ' + grace);
-      if (err) meta.push('Detalle: ' + err);
-      meta.push('Acción requerida: revisar/activar licencia (el servidor puede limitar el acceso según política de enforcement).');
-      out.push({ sev: 'danger', title: title, meta: meta.join(' · ') });
-    } else if (tamper) {
-      var mt = ['Se detectó posible alteración de reloj.'];
-      if (vu) mt.push('Vencimiento: ' + vu);
-      if (grace) mt.push('Gracia hasta: ' + grace);
-      mt.push('Acción requerida: corregir fecha/hora del sistema y volver a verificar.');
-      out.push({ sev: 'danger', title: 'Licencia: reloj alterado', meta: mt.join(' · ') });
-    } else if (st === 'GRACE' || (grace && !blocked)) {
-      var mg = ['Licencia en período de gracia.'];
-      if (vu) mg.push('Vencimiento: ' + vu);
-      if (grace) mg.push('Gracia hasta: ' + grace);
-      if (mode) mg.push('Modo: ' + mode);
-      mg.push('Acción recomendada: regularizar la licencia antes del fin de gracia.');
-      out.push({ sev: 'warn', title: 'Licencia: en gracia', meta: mg.join(' · ') });
-    } else if (st === 'ACTIVE') {
-      if (err) out.push({ sev: 'warn', title: 'Licencia activa (aviso)', meta: 'Último aviso: ' + err });
-    } else if (st) {
-      var ms = ['Estado: ' + st + '.'];
-      if (vu) ms.push('Vencimiento: ' + vu);
-      if (grace) ms.push('Gracia: ' + grace);
-      if (err) ms.push('Detalle: ' + err);
-      out.push({ sev: 'warn', title: 'Licencia: estado a revisar', meta: ms.join(' · ') });
-    }
-
-    if (upd) {
-      out.push({ sev: 'info', title: 'Actualización disponible', meta: 'Versión disponible: ' + upd + '. No se aplican actualizaciones automáticas desde la app.' });
-    }
-    return out;
-  }
-
-  function ensureActivationOverlay() {
-    var el = document.getElementById('licensing-activation-overlay');
-    if (el) return el;
-    el = document.createElement('div');
-    el.id = 'licensing-activation-overlay';
-    el.setAttribute('role', 'dialog');
-    el.setAttribute('aria-modal', 'true');
-    el.setAttribute('aria-labelledby', 'lic-activation-title');
-    el.style.cssText = 'display:none;position:fixed;inset:0;z-index:11000;background:var(--ap-bg,#12181b);color:var(--ap-ink,#e8ece6);overflow:auto;padding:24px 16px;font-family:Manrope,system-ui,sans-serif;';
-    el.innerHTML = ''
-      + '<div id="lic-activation-card" style="max-width:560px;margin:4vh auto;background:var(--ap-surface,#1e262a);border:1px solid var(--ap-border,rgba(255,255,255,.08));border-radius:14px;padding:22px 20px;box-shadow:0 12px 40px rgba(0,0,0,.45);">'
-      + '  <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'
-      + '    <span aria-hidden="true" style="display:inline-flex;width:36px;height:36px;border-radius:10px;align-items:center;justify-content:center;background:rgba(248,113,113,.14);color:#f87171;font-weight:800;">!</span>'
-      + '    <h1 id="lic-activation-title" style="margin:0;font-size:20px;line-height:1.2;color:var(--ap-ink,#e8ece6);">Activación Requerida</h1>'
-      + '  </div>'
-      + '  <p id="lic-activation-msg" style="margin:0 0 12px;color:var(--ap-muted,#9aa6a0);font-size:14px;line-height:1.5;">El sistema requiere una licencia válida para continuar. Acceso restringido según política de licenciamiento.</p>'
-      + '  <div id="lic-activation-details" style="font-size:13px;line-height:1.55;color:var(--ap-ink,#e8ece6);background:rgba(255,255,255,.03);border:1px solid var(--ap-border,rgba(255,255,255,.08));border-radius:10px;padding:12px 12px;margin:0 0 14px;"></div>'
-      + '  <div style="font-size:13px;color:var(--ap-muted,#9aa6a0);line-height:1.5;">'
-      + '    <strong style="color:var(--ap-ink,#e8ece6);">Pasos:</strong>'
-      + '    <ol style="margin:6px 0 0 18px;padding:0;">'
-      + '      <li>Verifique conectividad con el servidor de licencias y la configuración del sistema.</li>'
-      + '      <li>Contacte a soporte/administración para activar o regularizar la licencia de esta instalación.</li>'
-      + '      <li>Una vez activada, recargue esta página o inicie sesión para continuar.</li>'
-      + '    </ol>'
-      + '  </div>'
-      + '</div>';
-    document.body.appendChild(el);
-    return el;
-  }
-
-  function setSpaHidden(hidden) {
-    var ids = ['login-section', 'dashboard-section'];
-    ids.forEach(function (id) {
-      var el = document.getElementById(id);
-      if (!el) return;
-      if (hidden) {
-        if (!el.hasAttribute('data-lic-prev-display')) el.setAttribute('data-lic-prev-display', el.style.display || '');
-        el.style.setProperty('display', 'none', 'important');
-        el.setAttribute('aria-hidden', 'true');
+  async function refreshSetup(){
+    if(setupState.inFlight) return;
+    setupState.inFlight = true;
+    try{
+      var st = await fetchSetupStatus();
+      if(!st) return;
+      setupState.status = st;
+      updateUrls(st);
+      if(st.needsSetup){
+        showSetup(true);
+        try{ if(location.pathname !== '/setup' && location.pathname !== '/activacion') history.replaceState(null,'','/setup'); }catch(e){}
+        ['login-section','dashboard-section','vista-activacion'].forEach(function(id){ var el=$(id); if(!el) return; el.style.setProperty('display','none','important'); });
       } else {
-        if (el.hasAttribute('data-lic-prev-display')) {
-          var prev = el.getAttribute('data-lic-prev-display');
-          el.style.display = prev;
-          el.removeAttribute('data-lic-prev-display');
-          el.removeAttribute('aria-hidden');
-        }
+        showSetup(false);
+        if(location.pathname === '/setup'){ try{ history.replaceState(null,'','/'); }catch(e){} }
       }
-    });
+    } finally { setupState.inFlight = false; }
   }
-
-  function renderActivationOverlay(status) {
-    var overlay = ensureActivationOverlay();
-    var blocked = !!(status && status.blocked);
-    if (!blocked) {
-      overlay.style.display = 'none';
-      setSpaHidden(false);
+  window.setupRefreshStatus = refreshSetup;
+  window.setupCopyText = async function(fieldId,msgId){
+    var el = $(fieldId); var msg = $(msgId);
+    var val = el ? (el.value || el.textContent || '') : '';
+    if(!val || val === 'No disponible' || val.indexOf('Generando') === 0 || val.indexOf('No disponible (') === 0){
+      if(msg){ msg.textContent = 'No hay un enlace disponible para copiar todavía.'; msg.style.color = 'var(--ap-danger,#f87171)'; }
       return;
     }
-    setSpaHidden(true);
-    var st = String((status && status.licenseStatus) || 'BLOQUEADA').toUpperCase();
-    var details = [];
-    if (status && status.blockReason) details.push('<div><strong>Motivo:</strong> ' + esc(String(status.blockReason)) + '</div>');
-    details.push('<div><strong>Estado:</strong> ' + esc(st) + '</div>');
-    if (status && status.planCode) details.push('<div><strong>Plan:</strong> ' + esc(String(status.planCode)) + '</div>');
-    if (status && status.validUntil) details.push('<div><strong>Vencimiento:</strong> ' + esc(fmtDate(status.validUntil)) + '</div>');
-    if (status && status.graceDeadlineAt) details.push('<div><strong>Gracia hasta:</strong> ' + esc(fmtDate(status.graceDeadlineAt)) + '</div>');
-    if (status && status.lastCheckAt) details.push('<div><strong>Última verificación:</strong> ' + esc(fmtDate(status.lastCheckAt)) + '</div>');
-    if (status && status.clockTamperSuspected) details.push('<div><strong>Reloj:</strong> posible alteración detectada. Corrija fecha/hora del sistema.</div>');
-    if (status && status.lastError) details.push('<div><strong>Detalle técnico:</strong> ' + esc(String(status.lastError)) + '</div>');
-    var detailsEl = overlay.querySelector('#lic-activation-details');
-    if (detailsEl) detailsEl.innerHTML = details.join('');
-    overlay.style.display = 'block';
-  }
-
-  function render(status) {
-    renderActivationOverlay(status);
-    var banners = deriveBanners(status);
-    var key = JSON.stringify(banners.map(function (b) { return [b.sev, b.title, b.meta]; }));
-    if (key === state.lastKey) return;
-    state.lastKey = key;
-    if (!banners.length) { root.innerHTML = ''; return; }
-    injectStyles();
-    root.innerHTML = banners.map(function (b) {
-      var cls = b.sev === 'danger' ? 'lic-banner lic-banner--danger' : (b.sev === 'warn' ? 'lic-banner lic-banner--warn' : 'lic-banner lic-banner--info');
-      return '<div class="' + cls + '" role="status">'
-        + '<div class="lic-banner__body"><p class="lic-banner__title">' + esc(b.title) + '</p><p class="lic-banner__meta">' + esc(b.meta) + '</p></div>'
-        + '<div class="lic-banner__actions"><button type="button" class="lic-banner__btn" aria-label="Ocultar aviso">Ocultar</button></div>'
-        + '</div>';
-    }).join('');
-    root.querySelectorAll('.lic-banner__btn').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var el = btn.closest('.lic-banner');
-        if (el) el.remove();
-      });
-    });
-  }
-
-  async function refresh() {
-    if (state.inFlight) return;
-    var t = token();
-    if (!t) { state.lastKey = null; root.innerHTML = ''; return; }
-    state.inFlight = true;
-    try {
-      var res = await fetch('/licensing/status', {
-        method: 'GET',
-        headers: { 'Authorization': 'Bearer ' + t, 'Accept': 'application/json' },
-        cache: 'no-store'
-      });
-      if (res.status === 401 || res.status === 403) {
-        state.lastKey = null; root.innerHTML = '';
-        return;
-      }
-      if (!res.ok) return;
-      var data = await res.json();
-      render(data);
-    } catch (e) {
-      // silencioso
-    } finally {
-      state.inFlight = false;
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText){ await navigator.clipboard.writeText(val); }
+      else { if(el && el.focus) el.focus(); if(el && el.select) el.select(); var ok=document.execCommand&&document.execCommand('copy'); if(!ok) throw new Error('copy-failed'); }
+      if(msg){ msg.textContent = 'Copiado correctamente.'; msg.style.color = 'var(--ap-forest,#34d399)'; setTimeout(function(){ if(msg && msg.textContent==='Copiado correctamente.') msg.textContent=''; }, 2500); }
+    }catch(e){ if(msg){ msg.textContent = 'No se pudo copiar automáticamente. Seleccione y copie manualmente.'; msg.style.color = 'var(--ap-danger,#f87171)'; } }
+  };
+  window.setupCreateAdmin = async function(){
+    var btn = $('setup-create-btn'); var msg = $('setup-msg');
+    var nombre = ($('setup-admin-nombre')||{}).value || '';
+    var email = (($('setup-admin-email')||{}).value || '').trim().toLowerCase();
+    var p1 = ($('setup-admin-password')||{}).value || '';
+    var p2 = ($('setup-admin-password2')||{}).value || '';
+    if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
+      if(msg){ msg.textContent='Ingrese un correo/usuario válido.'; msg.style.color='var(--ap-danger,#f87171)'; } return;
     }
+    if(!p1 || p1.length < 6){
+      if(msg){ msg.textContent='La contraseña debe tener al menos 6 caracteres.'; msg.style.color='var(--ap-danger,#f87171)'; } return;
+    }
+    if(p1 !== p2){
+      if(msg){ msg.textContent='Las contraseñas no coinciden.'; msg.style.color='var(--ap-danger,#f87171)'; } return;
+    }
+    if(btn){ btn.disabled=true; btn.textContent='Creando...'; }
+    if(msg){ msg.textContent='Creando administrador...'; msg.style.color='var(--ap-muted,#9aa6a0)'; }
+    try{
+      var res = await fetch('/installation/setup-admin', { method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'}, body: JSON.stringify({ email: email, password: p1, nombre: nombre }) });
+      var data = await res.json().catch(function(){ return {}; });
+      if(!res.ok || !data.ok){
+        var err = (data && (data.message || data.error)) || ('No se pudo crear el administrador ('+res.status+').');
+        if(typeof err === 'object') err = err.message || JSON.stringify(err);
+        throw new Error(err);
+      }
+      if(msg){ msg.textContent='Administrador creado. Iniciando sesión...'; msg.style.color='var(--ap-forest,#34d399)'; }
+      try{
+        var lr = await fetch('/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email: email, password: p1 }) });
+        var ld = await lr.json().catch(function(){ return {}; });
+        if(lr.ok && ld && ld.access_token){
+          try{ localStorage.setItem('token', ld.access_token); localStorage.setItem('rol', ld.rol||'admin'); localStorage.setItem('email', ld.email||email); if(ld.aserradero!=null) localStorage.setItem('aserradero', ld.aserradero); }catch(e){}
+          setTimeout(function(){ try{ history.replaceState(null,'','/'); }catch(e){} location.reload(); }, 500);
+          return;
+        }
+      }catch(e){}
+      if(msg){ msg.textContent='Administrador creado. Inicie sesión con sus credenciales.'; msg.style.color='var(--ap-forest,#34d399)'; }
+      setTimeout(function(){ try{ history.replaceState(null,'','/'); }catch(e){} location.reload(); }, 800);
+    }catch(e){
+      if(msg){ msg.textContent = (e && e.message) ? e.message : 'Error al crear el administrador.'; msg.style.color='var(--ap-danger,#f87171)'; }
+    }finally{
+      if(btn){ btn.disabled=false; btn.textContent='Crear administrador e ingresar'; }
+    }
+  };
+  function startSetup(){
+    refreshSetup();
+    if(setupState.timer) clearInterval(setupState.timer);
+    setupState.timer = setInterval(function(){ if(setupState.status && !setupState.status.needsSetup){ clearInterval(setupState.timer); setupState.timer=null; return; } refreshSetup(); }, 7000);
   }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', startSetup); else startSetup();
+})();
+</script>
 
-  function start() {
-    refresh();
-    if (state.timer) clearInterval(state.timer);
-    state.timer = setInterval(refresh, 5 * 60 * 1000);
-    window.addEventListener('focus', function () { refresh(); });
-    document.addEventListener('visibilitychange', function () { if (!document.hidden) refresh(); });
-    window.addEventListener('storage', function (e) { if (e && e.key === 'token') refresh(); });
-  }
-
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
-  else start();
+<script>
+(function(){
+  'use strict';
+  var root=document.getElementById('licensing-banner-root');
+  var state={lastKey:null,timer:null,inFlight:false,lastStatus:null};
+  function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+  function fmtDate(iso){if(!iso)return '-';try{var d=new Date(iso);return isNaN(d.getTime())?String(iso):d.toLocaleString('es-AR');}catch(e){return String(iso);}}
+  function authToken(){try{return localStorage.getItem('token')||'';}catch(e){return '';}}
+  function injectStyles(){if(document.getElementById('licensing-banner-style'))return;var st=document.createElement('style');st.id='licensing-banner-style';st.textContent='#licensing-banner-root{position:fixed;top:10px;left:10px;right:10px;z-index:10050;display:flex;flex-direction:column;gap:8px;pointer-events:none;}.lic-banner{pointer-events:auto;border:1px solid var(--ap-border-strong,rgba(232,236,230,.2));border-left:4px solid var(--ap-forest,#34d399);background:var(--ap-elevated,#243038);color:var(--ap-ink,#e8ece6);box-shadow:0 10px 30px rgba(0,0,0,.35);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.35;display:flex;gap:10px;align-items:flex-start;}.lic-banner--warn{border-left-color:#f59e0b;}.lic-banner--danger{border-left-color:var(--ap-danger,#f87171);}.lic-banner--info{border-left-color:#38bdf8;}.lic-banner__body{flex:1;min-width:0;}.lic-banner__title{font-weight:700;margin:0 0 2px 0;font-size:12px;}.lic-banner__meta{margin:0;color:var(--ap-muted,#93a197);font-size:11px;}.lic-banner__actions{display:flex;gap:6px;flex-shrink:0;}.lic-banner__btn{background:transparent;color:var(--ap-ink,#e8ece6);border:1px solid var(--ap-border,rgba(232,236,230,.12));border-radius:6px;padding:3px 8px;cursor:pointer;font-size:11px;}@media (max-width:640px){#licensing-banner-root{left:8px;right:8px;top:8px;}.lic-banner{padding:9px 10px;}}';document.head.appendChild(st);}
+  function isBlockedStatus(stt){if(!stt)return true;if(stt.blocked)return true;var st=String(stt.licenseStatus||'').toUpperCase();if(!st)return true;if(st==='REVOKED'||st==='SUSPENDED'||st==='NOT_FOUND')return true;return false;}
+  function setSpaHidden(hidden){['login-section','dashboard-section'].forEach(function(id){var el=document.getElementById(id);if(!el)return;if(hidden){if(!el.hasAttribute('data-lic-prev-display'))el.setAttribute('data-lic-prev-display',el.style.display||'');el.style.setProperty('display','none','important');el.setAttribute('aria-hidden','true');}else if(el.hasAttribute('data-lic-prev-display')){el.style.display=el.getAttribute('data-lic-prev-display')||'';el.removeAttribute('data-lic-prev-display');el.removeAttribute('aria-hidden');}});}
+  function renderActivationView(status){var blocked=isBlockedStatus(status);var view=document.getElementById('vista-activacion');if(!view)return;var subTab=document.getElementById('tab-suscripcion');if(subTab)subTab.classList.toggle('hidden',blocked);if(!blocked){view.classList.add('hidden');view.style.display='none';setSpaHidden(false);if(location.pathname==='/activacion'){try{history.replaceState(null,'','/');}catch(e){}}return;}if(location.pathname!=='/activacion'){try{history.replaceState(null,'','/activacion');}catch(e){}}setSpaHidden(true);view.classList.remove('hidden');view.style.display='block';var st=String((status&&status.licenseStatus)||'SIN LICENCIA').toUpperCase();var box=document.getElementById('act-status-box');if(box){var rows=[];rows.push('<div><strong>Estado:</strong> '+esc(st)+'</div>');if(status&&status.blockReason)rows.push('<div><strong>Motivo:</strong> '+esc(status.blockReason)+'</div>');if(status&&status.planCode)rows.push('<div><strong>Plan:</strong> '+esc(status.planCode)+'</div>');if(status&&status.validUntil)rows.push('<div><strong>Vencimiento:</strong> '+esc(fmtDate(status.validUntil))+'</div>');if(status&&status.graceDeadlineAt)rows.push('<div><strong>Gracia hasta:</strong> '+esc(fmtDate(status.graceDeadlineAt))+'</div>');if(status&&status.daysRemaining!=null)rows.push('<div><strong>Días restantes:</strong> '+esc(status.daysRemaining)+'</div>');if(status&&status.clockTamperSuspected)rows.push('<div><strong>Reloj:</strong> posible alteración detectada. Corrija fecha/hora del servidor.</div>');if(status&&status.lastError)rows.push('<div><strong>Detalle:</strong> '+esc(status.lastError)+'</div>');box.innerHTML=rows.join('');}var hw=document.getElementById('act-hwid');var inst=document.getElementById('act-instance');if(hw)hw.value=(status&&status.machineIdHash)||'';if(inst)inst.value=(status&&status.instanceId)||'';}
+  function renderSuscripcion(status){if(!status)return;var st=String(status.licenseStatus||'SIN LICENCIA').toUpperCase();var blocked=isBlockedStatus(status);var set=function(id,val){var el=document.getElementById(id);if(!el)return;if(el.tagName==='INPUT'||el.tagName==='TEXTAREA')el.value=val;else el.textContent=val;};set('sub-estado',st);set('sub-plan',status.planCode||'-');set('sub-vencimiento',fmtDate(status.validUntil));set('sub-dias',status.daysRemaining!=null?String(status.daysRemaining):'-');set('sub-gracia',fmtDate(status.graceDeadlineAt));set('sub-check',fmtDate(status.lastSuccessfulCheckAt||status.lastCheckAt));set('sub-hwid',status.machineIdHash||'');set('sub-instance',status.instanceId||'');set('sub-msg',status.blockReason||(status.clockTamperSuspected?'Se detectó posible alteración de reloj.':''));var badge=document.getElementById('sub-badge-estado');if(badge){badge.textContent=st;badge.style.color=blocked?'var(--ap-danger,#f87171)':'var(--ap-forest,#34d399)';badge.style.borderColor=blocked?'rgba(248,113,113,.4)':'rgba(52,211,153,.4)';}}
+  function deriveBanners(status){if(!status||typeof status!=='object')return [];var out=[];if(isBlockedStatus(status))return out;var st=String(status.licenseStatus||'').toUpperCase();var upd=status.updateAvailableVersion?String(status.updateAvailableVersion):'';if(status.clockTamperSuspected)out.push({sev:'warn',title:'Licencia: reloj alterado',meta:'Se detectó posible alteración de reloj. Corrija fecha/hora y vuelva a verificar.'});else if(st==='GRACE')out.push({sev:'warn',title:'Licencia: en período de gracia',meta:'Vencimiento: '+fmtDate(status.validUntil)+'. Gracia hasta: '+fmtDate(status.graceDeadlineAt)+'.'});if(upd)out.push({sev:'info',title:'Actualización disponible',meta:'Versión disponible: '+upd+'. No se aplican actualizaciones automáticas desde la app.'});return out;}
+  function renderBanners(status){if(!root)return;var banners=deriveBanners(status);var key=JSON.stringify(banners.map(function(b){return [b.sev,b.title,b.meta];}));if(key===state.lastKey)return;state.lastKey=key;if(!banners.length){root.innerHTML='';return;}injectStyles();root.innerHTML=banners.map(function(b){var cls=b.sev==='danger'?'lic-banner lic-banner--danger':(b.sev==='warn'?'lic-banner lic-banner--warn':'lic-banner lic-banner--info');return '<div class="'+cls+'" role="status"><div class="lic-banner__body"><p class="lic-banner__title">'+esc(b.title)+'</p><p class="lic-banner__meta">'+esc(b.meta)+'</p></div><div class="lic-banner__actions"><button type="button" class="lic-banner__btn" aria-label="Ocultar aviso">Ocultar</button></div></div>';}).join('');root.querySelectorAll('.lic-banner__btn').forEach(function(btn){btn.addEventListener('click',function(){var el=btn.closest('.lic-banner');if(el)el.remove();});});}
+  async function fetchActivationStatus(){try{var res=await fetch('/licensing/activation-status',{method:'GET',headers:{'Accept':'application/json'},cache:'no-store'});if(!res.ok)return null;return await res.json();}catch(e){return null;}}
+  async function fetchAdminStatusIfPossible(){var t=authToken();if(!t)return null;try{var res=await fetch('/licensing/status',{method:'GET',headers:{'Authorization':'Bearer '+t,'Accept':'application/json'},cache:'no-store'});if(!res.ok)return null;return await res.json();}catch(e){return null;}}
+  async function refresh(){if(state.inFlight)return;state.inFlight=true;try{var pub=await fetchActivationStatus();var adm=await fetchAdminStatusIfPossible();var merged=Object.assign({},pub||{},adm||{});if(pub){merged.blocked=pub.blocked;merged.blockReason=pub.blockReason;merged.licenseStatus=pub.licenseStatus;merged.machineIdHash=pub.machineIdHash;merged.instanceId=pub.instanceId;merged.validUntil=pub.validUntil;merged.graceDeadlineAt=pub.graceDeadlineAt;merged.daysRemaining=pub.daysRemaining;merged.clockTamperSuspected=pub.clockTamperSuspected;merged.planCode=pub.planCode;merged.lastError=pub.lastError;merged.validFrom=pub.validFrom;}state.lastStatus=merged;renderActivationView(merged);renderBanners(merged);renderSuscripcion(merged);window.__licensingStatus=merged;}finally{state.inFlight=false;}}
+  window.licRefreshActivationStatus=refresh;window.licRefreshSuscripcion=refresh;
+  window.licCopyField=async function(fieldId,msgId){var el=document.getElementById(fieldId);var msg=document.getElementById(msgId);var val=el?(el.value||el.textContent||''):'';if(!val){if(msg)msg.textContent='No hay código disponible para copiar.';return;}try{if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(val);}else{if(el&&el.focus)el.focus();if(el&&el.select)el.select();var ok=document.execCommand&&document.execCommand('copy');if(!ok)throw new Error('copy-failed');}if(msg){msg.textContent='Código copiado.';msg.style.color='var(--ap-forest,#34d399)';setTimeout(function(){if(msg)msg.textContent='';},2500);}}catch(e){if(msg){msg.textContent='No se pudo copiar automáticamente. Seleccione y copie manualmente.';msg.style.color='var(--ap-danger,#f87171)';}}};
+  window.licActivateFrom=async function(textareaId,msgId,btnId,fromSuscripcion){var ta=document.getElementById(textareaId);var msg=document.getElementById(msgId);var btn=document.getElementById(btnId);var token=ta?String(ta.value||'').trim():'';if(!token){if(msg){msg.textContent='Pegue la licencia antes de activar.';msg.style.color='var(--ap-danger,#f87171)';}return;}if(btn){btn.disabled=true;btn.textContent='Activando...';}if(msg){msg.textContent='Verificando licencia...';msg.style.color='var(--ap-muted,#9aa6a0)';}try{var res=await fetch('/licensing/activate-token',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({licenseToken:token})});var data=await res.json().catch(function(){return {};});var ok=!!data.ok;var message=data.message||(ok?'Licencia activada correctamente.':'No se pudo activar la licencia.');if(msg){msg.textContent=message;msg.style.color=ok?'var(--ap-forest,#34d399)':'var(--ap-danger,#f87171)';}await refresh();if(ok&&!isBlockedStatus(state.lastStatus||{})){if(!fromSuscripcion){setTimeout(function(){try{history.replaceState(null,'','/');location.reload();}catch(e){location.href='/';}},700);}}}catch(e){if(msg){msg.textContent='Error de red al activar. Intente nuevamente.';msg.style.color='var(--ap-danger,#f87171)';}}finally{if(btn){btn.disabled=false;btn.textContent='Activar Sistema';}}};
+  window.__licensingIsBlocked=function(){return isBlockedStatus(state.lastStatus||{});};
+  function start(){refresh();if(state.timer)clearInterval(state.timer);state.timer=setInterval(refresh,60000);window.addEventListener('focus',function(){refresh();});document.addEventListener('visibilitychange',function(){if(!document.hidden)refresh();});window.addEventListener('storage',function(e){if(e&&e.key==='token')refresh();});}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
 })();
 </script>
 </body>

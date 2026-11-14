@@ -1,0 +1,105 @@
+# Contrato Auth↔ERP (operación remota) + Gap Analysis — Pilar 2
+
+> **Estado:** contrato **aceptado por Pilar 1** (2026-11-14, respuesta desde `sistema-aserradero-auth`) con precisiones operativas; pendiente cierre de URL oficial de producción, SLA de intervalo y validación E2E remota.  
+> **Fuente Pilar 1:** respuesta/aceptación recibida (ver §6) + contexto previo (`/v1/license/verify`, `/.well-known/license-jwks.json`, pull sin push, binding, RS256/JWS, `issue-token`).  
+> **Evidencia Pilar 2:** `src/licensing/*`, `.env.example`, `deploy/docker-compose.prod.yml`, `deploy/windows-installer/*`, `docs/licenciamiento.md`, `docs/windows-packaging.md`.  
+> **Nota estado actual `.env.example`:** configurado temporalmente para prueba local (`LICENSE_SERVER_URL=http://host.docker.internal:3001`) con `LICENSE_PUBLIC_KEY_PEM`/`kid` `prod-20261111` confirmado por Pilar 1; **no apto para distribución a clientes remotos** hasta fijar URL HTTPS oficial.
+
+## 1. Contrato propuesto
+
+### Responsabilidad Auth (Pilar 1)
+
+1. **Disponibilidad y exposición segura (requisito de despliegue):** publicar el servicio de licencias de forma **alcanzable desde los ERP remotos** con URL base estable. En productivo se recomienda **HTTPS/TLS**. Configurar DNS, firewall y ruteo para permitir acceso saliente de clientes al endpoint. (Pilar 2 no puede exponer/publicar Auth.)
+2. **Endpoints y verificación (pull):** mantener accesibles:
+   - `POST /v1/license/verify` — recibe identidad/binding del cliente y devuelve estado efectivo + JWS firmado **RS256** (con `kid`), conforme a política acordada.
+   - `GET /.well-known/license-jwks.json` — clave(s) activa(s) para verificación/firma (`kid` activo, p.ej. `prod-20261111`).
+3. **Contrato criptográfico y de claims:** firma RS256 verificable contra JWKS/clave publicada; binding **byte a byte** `sub == machine.machineIdHash` e `instance_id == instanceId`; claims/estados `ACTIVE|GRACE|EXPIRED|REVOKED|SUSPENDED|NOT_FOUND`; `valid_from/valid_until/grace_hours/server_time/exp/jti` según política acordada.
+4. **Modelo de propagación (sin push):** Auth es fuente de verdad pero **no hace push**. Cambios (suspender/revocar/restaurar) se reflejan en la **próxima verificación exitosa** del ERP (`verifyNow`: arranque ~5s, intervalo periódico, `POST /licensing/check-now` admin, y flujo de activación/renovación según aplique). Si el ERP no alcanza al Auth, no puede enterarse hasta reconectar y verificar.
+5. **Emisión para activación/renovación offline-controlada:** admin puede emitir token JWS para el **mismo binding** (`sub`/`instance_id`), permitiendo activación/renovación sin llamada online al momento del pegado (el ERP verifica firma/binding/vigencia localmente).
+6. **Entrega segura de material de verificación:** proveer/documentar la **clave pública del firmante activo** (PEM SPKI, correspondiente al `kid` activo en JWKS) y la **URL base** oficial, por canal seguro y versionado cuando rote `kid`.
+
+### Responsabilidad ERP (Pilar 2)
+
+1. **Configuración remota obligatoria (sin asumir co-localización):**
+   - `LICENSE_SERVER_URL` = **URL base alcanzable del Auth central desde el contenedor/proceso ERP** (en productivo **HTTPS recomendado**). **Nunca asumir `localhost`, `127.0.0.1` ni `host.docker.internal`** para instalaciones remotas en otra PC/red. Debe ser configurable por `.env`/instalación.
+   - `LICENSE_PUBLIC_KEY_PEM` = clave pública **RS256 (SPKI)** del firmante activo, correspondiente al **mismo Auth/`kid`** que emite/firmó los tokens. Se configura por `.env` (soporta `\n` escapados). **Pinning local**: el ERP verifica firma con esta clave (`src/licensing/licensing.service.ts:getPublicKey/verifyAndDecodeSignedToken`).
+   - **Obtención:** URL oficial + PEM pública entregados por operación/proveedor (derivables de `/.well-known/license-jwks.json` del Auth publicado, convertidos a PEM SPKI) y documentados (`docs/licenciamiento.md`, `.env.example`, instalador). Rotación de `kid`/clave requiere actualizar `LICENSE_PUBLIC_KEY_PEM` en los clientes (o estrategia de actualización documentada).
+   - **Si no coinciden o faltan:** sin `LICENSE_SERVER_URL` el `verifyNow` online no puede consultar y registra `lastError` (el acceso depende del estado local previo/gracia); sin `LICENSE_PUBLIC_KEY_PEM` la verificación de firma falla y la activación/validación online no puede completarse de forma confiable (errores sanitizados “configuración incompleta / no hay clave pública…”). URL incorrecta/inalcanzable impide reflejar cambios remotos hasta reconectar.
+2. **Flujo online remoto:**
+   - **Verificación:** `POST {LICENSE_SERVER_URL}/v1/license/verify` con `{ machine_id_hash, instance_id, fingerprint_hash, app_version }` (`src/licensing/licensing.service.ts:verifyNow`). Espera respuesta con `token` JWS (y estado/server_time) verificable con la clave pinneada; valida binding y claims; persiste `licenseStatus, planCode, validUntil, graceDeadlineAt, lastSuccessfulCheckAt, lastServerTime, lastTokenJws`.
+   - **Activación inicial/renovación:**
+     - *Offline-controlada (recomendada cuando no hay conectividad en el momento):* admin del Auth emite JWS para el mismo binding; operador pega en `/activacion` o “Mi Suscripción” → `POST /licensing/activate-token` (público) verifica firma/binding/vigencia localmente y persiste estado (`activateWithToken`).
+     - *Online/admin:* `POST /licensing/check-now` y `POST /licensing/activate` (admin) fuerzan `verifyNow` contra el Auth remoto.
+   - **Disparadores de `verifyNow`:** arranque diferido ~5s (`LicenseValidationJob`), intervalo periódico, y `check-now` manual admin. (Alineado con Pilar 1: reflejo en próxima verificación exitosa.)
+   - **Errores de red/timeouts/DNS (Auth inalcanzable):** `verifyNow` captura fallos HTTP/red, guarda `lastError` y **no invalida** el estado previamente verificado (`licenseStatus/validUntil/graceDeadlineAt/lastTokenJws/lastSuccessfulCheckAt` se conservan). **No confundir “Auth inalcanzable” con `REVOKED/SUSPENDED/NOT_FOUND`**: el bloqueo por revocación/suspensión/no-encontrado solo aplica cuando el **estado efectivo verificado/persistido** lo indica; ante caída de red el ERP opera según último estado + vigencia/gracia hasta reconectar y verificar.
+3. **Flujo degradado/offline y enforcement:**
+   - **Operación con último estado:** permitido si está **dentro de validez** (`valid_until`) o **dentro de gracia** (`grace_deadline_at`) con token/verificación exitosa previa, **sin** `clockTamperSuspected` (`evaluateAccess`).
+   - **Anti-rollback/reloj:** detecta retroceso vs `server_time`/`last_server_time` (skew `LICENSE_CLOCK_SKEW_SEC`, default 300s); marca `clockTamperSuspected` (sticky) y **no extiende gracia**; bloqueo por posible manipulación de reloj en modos `grace/strict`.
+   - **Estados (comportamiento exacto):**
+     - `ACTIVE` (y vigente): acceso permitido.
+     - `GRACE`/fuera de validez pero dentro de gracia: permitido en `grace/strict/warn` (con aviso) mientras no haya tamper.
+     - `EXPIRED` o gracia finalizada: **bloqueado** en `grace/strict`.
+     - `REVOKED`, `SUSPENDED`, `NOT_FOUND`: **bloqueados** en `grace/strict` (terminales por política de acceso). Se reflejan al persistirse tras `verifyNow` exitoso o al activar un token con ese estado.
+     - `LICENSE_ENFORCEMENT=off`: no bloquea; `warn`: permite con avisos. Piloto acordado: `grace`, `UPDATES_AUTO_ENABLED=false`.
+   - **Recuperación:** al volver la conectividad y completar una `verifyNow` exitosa, se actualiza estado/vigencias/errores; el acceso se recalcula (se desbloquea si el nuevo estado efectivo y vigencia lo permiten, p.ej. restauración/renovación; permanece bloqueado si `REVOKED/SUSPENDED/EXPIRED`).
+4. **Frecuencia de verificación:**
+   - `LICENSE_CHECK_INTERVAL_MS`: mínimo **60000 ms**; **default 86400000 ms (24h)** (`LicenseValidationJob.resolveIntervalMs`). Check al arranque ~5s y `POST /licensing/check-now` (admin) disponibles.
+   - **Recomendación para remotos:** configurar un intervalo menor (p.ej. 1–6h) para **detección más rápida** de suspensiones/revocaciones, con trade-off de mayor dependencia de conectividad/carga y más ventanas de reintento; documentar según SLA operativo. (El cambio se refleja siempre en la próxima verificación exitosa, no antes.)
+5. **Instalador en PC limpia (sin Docker/Auth local):**
+   - **Parametrizable por configuración/artefacto de instalación:** `LICENSE_SERVER_URL` (URL del Auth central remoto), `LICENSE_PUBLIC_KEY_PEM` (firmante activo), y parámetros de licencia/intervalo (`LICENSE_CHECK_INTERVAL_MS`, `LICENSE_GRACE_HOURS`, etc.) deben poder definirse **antes de distribuir** (en `.env.example` empaquetado) y/o **ajustarse post-instalación** en `.env` de la app.
+   - **Flujo de activación remota:** una vez el stack esté arriba y la URL/clave sean correctas, el operador obtiene `machine_id_hash`/`instance_id` desde `/activacion`, recibe JWS del mismo binding (emitido por Auth admin) y lo activa; con conectividad, `check-now`/verificación periódica sincroniza contra el Auth central.
+   - **Prerequisitos reales:** Docker Desktop funcional, **imagen GHCR publicada y accesible** (pública o esquema offline) con tag correcto, **red saliente** desde el host/contendor del ERP hacia `LICENSE_SERVER_URL` (y DNS/TLS válidos), y Auth remoto operativo. Sin Auth local.
+6. **Supuestos de alcance:** Pilar 1 debe estar desplegado y accesible; DNS/TLS/firewall/certificados del Auth son de infra/operación. El ERP es responsable de configurar URL/clave correctas, persistir identidad/estado (`LICENSE_STATE_PATH`, volumen), verificar firma/binding, aplicar enforcement y exponer mensajes/operativa de activación y `check-now`.
+
+## 2. Gap analysis (implementación/instalador actual vs contrato remoto)
+
+| # | Brecha (archivo/comportamiento) | Evidencia actual | Impacto remoto | Ajuste requerido |
+|---|---|---|---|---|
+| G1 | **`.env.example` orientado a prueba local** | `.env.example`: `LICENSE_SERVER_URL=http://host.docker.internal:3001` y PEM distinta a la documentada en `docs/licenciamiento.md` (key de prod pinneada). Comentario sugiere URL real pero valor por defecto no es apto para remoto. | Instalación distribuida tal cual apunta a un host inexistente en cliente → `verifyNow` falla; activación online/check-now no sincronizan. | Plantilla de distribución con placeholders/valores de **producción remota** (URL HTTPS del Auth, PEM/kid vigente) y comentarios explícitos “no usar localhost/host.docker.internal en clientes remotos”. |
+| G2 | **Inconsistencia de clave/URL entre artefactos y docs** | `docs/licenciamiento.md` declara `https://licencias.example.com` y PEM productiva (kid `prod-20261111`); `.env.example` trae otra URL/PEM; compose prod default `APP_VERSION=0.0.1` vs `.env.example` `v1.0.0`. | Riesgo de firma inválida (“configuración incompleta/firma inválida”) o apuntar a Auth equivocado si se mezclan artefactos. | Unificar fuente de verdad de distribución (URL/PEM/kid/versión) y validar coherencia antes de empaquetar. |
+| G3 | **Instalador no parametriza licencia remota** | `deploy/windows-installer/bootstrap.ps1` genera `.env` desde `.env.example` solo si falta y **no solicita ni sobreescribe** `LICENSE_SERVER_URL`/`LICENSE_PUBLIC_KEY_PEM` (preserva valores). `setup.iss` empaqueta archivos fijos, sin wizard/campos para URL/clave. | En PC limpia remota, la licencia funcionará solo si el `.env.example` empaquetado ya trae la URL/clave correctas o el usuario edita `.env` manualmente (no guiado). | Preconfigurar `.env.example` de release para remoto **o** agregar mecanismo de parametrización (p.ej. instrucciones/soporte de edición guiada o archivo de config previo) y documentar paso obligatorio. |
+| G4 | **Sin validación/feedback específico de URL remota** | `getServerUrl()` solo hace trim/`/` final (`licensing.service.ts`); errores de verify se guardan como `lastError` genérico HTTP/mensaje (`verify http ...`). Bootstrap no prueba conectividad a `LICENSE_SERVER_URL`. | Usuario remoto recibe fallos poco orientativos (DNS/TLS/red) y puede confundir “inalcanzable” con otros problemas. | Mejorar mensajes/diagnóstico (distinguir timeout/DNS/conexión rechazada/HTTP) y documentar troubleshooting; opcional: verificación de formato/alcance en arranque (sin bloquear operación offline con estado válido). |
+| G5 | **Frecuencia default 24h no destacada para revocación rápida** | `LICENSE_CHECK_INTERVAL_MS` default 86400000, mínimo 60000 (`license-validation.job.ts`). Docs mencionan intervalos pero no una recomendación explícita para detección rápida en remotos. | Suspensión/revocación remota puede tardar hasta el próximo ciclo (máx ~24h por defecto) + reconexión. | Documentar trade-off y recomendar valor operativo menor para entornos que requieran propagación más rápida; exponer en `.env.example` comentado. |
+| G6 | **Supuestos implícitos de entrega/alcance** | `docs/windows-packaging.md` pide conectividad al servidor de licencias; no detalla que `host.docker.internal` es solo local-dev ni checklist de URL pública/TLS/firewall del Auth. | Despliegues remotos fallan por prerequisitos de Pilar 1 no explicitados. | Documentar explícitamente: Auth publicado y alcanzable (HTTPS, DNS, firewall) es requisito de Pilar 1; ERP requiere red saliente y URL/clave correctas. |
+| G7 | **Coherencia de identidad de versión/config** | `.env.example` `APP_VERSION=v1.0.0`, compose prod fallback `APP_VERSION=0.0.1`. Imagen/tag depende de publicación GHCR. | Trazabilidad débil y posible confusión de soporte. | Alinear `APP_VERSION`/tag por release y documentar. (menor, operativo) |
+
+**Riesgos para “instalar en otra PC sin nada”:** (a) imagen no publicada/pública o tag inexistente → bootstrap/compose no levanta; (b) `LICENSE_SERVER_URL/PEM` incorrectos o apuntando a local → sin verificación online ni reflejo de cambios y posible fallo de activación por firma/alcance; (c) sin red saliente al Auth → opera solo con estado local/gracia previa (o bloqueado si nunca activó); (d) Auth no expuesto públicamente/TLS mal configurado → inalcanzable.
+
+**Pasos que debe seguir el usuario para configurar licencia remota (operación):** 1) Obtener del operador/Pilar 1 la **URL base** del Auth accesible desde la PC cliente y la **`LICENSE_PUBLIC_KEY_PEM`** (kid activo). 2) Antes de compilar/entregar el instalador, fijarlas en `deploy/.env.example` (y/o `docker-compose.prod.yml`/`APP_VERSION`-tag según release) o, tras instalar, editarlas en `{app}\.env`. 3) Instalar/levantar stack (Docker activo, internet para imagen/Auth). 4) Abrir ERP (`/activacion`), copiar `machine_id_hash` e `instance_id`. 5) Solicitar al admin de Auth un **token JWS** para ese binding y pegarlo en “Activar Sistema” (o usar `check-now`/verify con conectividad). 6) Verificar estado en “Mi Suscripción”/`/licensing/status` y ajustar `LICENSE_CHECK_INTERVAL_MS` según necesidad de propagación.
+
+## 3. Plan de cambios mínimos y compatibles (resumen)
+
+Ver `plan.md` y `tasks.md` para detalle. Principios: no cambiar semántica de estados/enforcement, no secretos, cambios compatibles (config/docs/validación/mensajes).
+
+1. **Plantillas/config de distribución:** actualizar `.env.example` (y guía de release) con placeholders/valores remotos claros (`LICENSE_SERVER_URL` HTTPS productivo, `LICENSE_PUBLIC_KEY_PEM` del `kid` vigente), comentario explícito de prohibir localhost/host.docker.internal en clientes remotos, y recomendación de `LICENSE_CHECK_INTERVAL_MS` para remotos; alinear `APP_VERSION`/tag.
+2. **Instalador/bootstrap:** mantener idempotencia; agregar soporte/documentación de parametrización (al menos instrucciones operativas y, si es viable sin romper UX, punto claro de configuración post-instalación o pre-empaquetado); loggear advertencia si `LICENSE_SERVER_URL` vacío o parece local (`localhost/127.0.0.1/host.docker.internal`) al generar `.env` para distribución (informativo, sin romper casos dev explícitos).
+3. **Validación/mensajes ERP:** mejorar clasificación/mensajes de error de `verifyNow` (timeout/DNS/conexión/HTTP/TLS) preservando regla “inalcanzable ≠ revocado” y sin filtrar datos sensibles; mensajes UI/`lastError` más accionables.
+4. **Documentación operativa:** unificar `docs/licenciamiento.md`, `docs/windows-packaging.md` y checklist de despliegue remoto (URL/PEM/kid, Auth expuesto por Pilar 1, red saliente, pasos de activación remota, intervalo recomendado). Registrar contrato.
+5. **Verificación:** pruebas de aceptación (ERP máquina A, Auth URL B alcanzable; suspensión/revocación reflejada en próxima verificación exitosa; sin Auth local; degradado con Auth caído).
+
+## 4. Acciones requeridas a Pilar 1 (actualizado tras aceptación)
+
+- **Código/contrato:** ninguna acción requerida; contrato aceptado (endpoints, RS256/JWKS, binding, pull sin push, `issue-token`, semántica de estados).
+- **Despliegue/operación (requerido):** exponer `sistema-aserradero-auth` accesible para ERPs remotos (URL estable, preferentemente **HTTPS/TLS**, DNS, firewall/ruteo, certificados) manteniendo `POST /v1/license/verify` y `GET /.well-known/license-jwks.json` (admin restringido). Definir/comunicar **URL base oficial** por entorno.
+- **Material:** entregar/confirmar **`kid` activo y `LICENSE_PUBLIC_KEY_PEM` (SPKI)** coherentes con el Auth publicado (derivables de JWKS) por canal seguro. Comunicar rotaciones con ventana de solapamiento (Auth soporta `SIGNING_PREVIOUS_PUBLIC_KEYS`).
+
+## 5. Respuesta/aceptación Pilar 1 (2026-11-14, `sistema-aserradero-auth`)
+
+- **Aceptado:** responsabilidades Pilar 1 (disponibilidad remota/infra, endpoints, cripto/binding, propagación pull, emisión token mismo binding, entrega URL/PEM/kid y comunicación de rotaciones) y responsabilidades Pilar 2 (config URL/PEM sin asumir co-localización, flujos online/offline, regla inalcanzable ≠ revocado, intervalo configurable, instalador sin Auth local). Sin canal push; sin auto-bloqueo por token entregado al cliente.
+- **Material vigente confirmado:**
+  - `SIGNING_KID` activo: `prod-20261111`
+  - `LICENSE_PUBLIC_KEY_PEM` (SPKI, RS256): clave proporcionada por Pilar 1 (coincide con la configurada en `.env.example` del ERP en esta sesión).
+  - `LICENSE_SERVER_URL` oficial productiva: **pendiente de definición/publicación** (entorno local de referencia `http://127.0.0.1:3001`, `API_ISSUER` placeholder `https://licencias.example.com`; no usar `host.docker.internal` para clientes remotos).
+- **SLA propagación:** latencia máx ≈ `LICENSE_CHECK_INTERVAL_MS` (más offline). Recomendación operativa **15–60 min** según SLA/carga; decisión exacta negocio/operación. `check-now`/reinicio para urgencias.
+- **Rotación de `kid` (pin PEM en ERP):** Auth soporta nueva clave+kid con solapamiento en JWKS (`SIGNING_PREVIOUS_PUBLIC_KEYS`). Como ERP usa **pin estático `LICENSE_PUBLIC_KEY_PEM`** (sin resolución JWKS runtime), clientes deben **actualizar PEM** dentro de la ventana planificada (release/actualización de config/soporte). Proceso: anunciar/publicar nueva PEM+kid (JWKS actualizado) → desplegar actualización a ERPs → retirar clave previa al fin del solapamiento. (Evolución opcional: validación ERP por JWKS+kid en runtime, cambio acordado en Pilar 2.)
+- **E2E remoto:** validación local realizada; no hay Auth staging público expuesto para prueba remota real. Requiere P1-A (Auth en URL B accesible/HTTPS) + configuración ERP en A (`LICENSE_SERVER_URL=B`, PEM/kid de B).
+- **Avance Pilar 1 (2026-11-14, en su repo):** cerró handoff/memoria y documentación operativa (`docs/operations.md`: operación remota, exposición HTTPS/DNS/firewall, paquete por entorno URL+kid+PEM+API_ISSUER, recomendación intervalo 15–60 min, runbook rotación/solapamiento con implicación de pin PEM). Sin cambios de código/producto en Auth. Bloqueantes que permanecen: **P1-A** despliegue URL HTTPS oficial accesible + decisión SLA/estrategia rotación conjunta + E2E remoto. T3–T7 y ejecución de T1–T2/T5–T6 en ERP dependen de URL/SLA oficiales.
+
+## 6. Preguntas abiertas (actualizadas)
+
+1. **[P1/ops, pendiente] URL oficial productiva (y staging si aplica):** ¿cuál es la `LICENSE_SERVER_URL` HTTPS pública definitiva para fijar en `.env.example`/instalador? (bloquea paquete distribuible remoto).
+2. **[Producto/ops, pendiente] SLA de propagación:** ¿valor objetivo para `LICENSE_CHECK_INTERVAL_MS` recomendado en distribución (p.ej. 15, 30 o 60 min) considerando carga del Auth y urgencia de revocación/suspensión?
+3. **[P2/decisión] Mecanismo de confianza a largo plazo:** ¿ERP mantiene **pin PEM estático** (actualización en rotación, proceso ya definido) o se planifica validación por **JWKS+kid** en runtime? (impacta runbook conjunto de rotación).
+4. **[P1/ops, pendiente] Entorno E2E remoto:** disponibilidad de Auth en URL B accesible para prueba “ERP en A, Auth en B, sin Auth local”.
+
+> Cierre parcial: PEM/kid confirmados y coherentes con `.env.example` actual; URL oficial, SLA final y E2E remoto siguen abiertos. Paquete instalable para clientes remotos requiere resolver (1) y recompilar con configuración de producción.

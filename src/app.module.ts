@@ -32,6 +32,7 @@ import { ReportesModule } from './reportes/reportes.module.js';
 import { CierresModule } from './cierres/cierres.module.js';
 import { LicensingModule } from './licensing/licensing.module.js';
 import { UpdatesModule } from './updates/updates.module.js';
+import { InstallationModule } from './installation/installation.module.js';
 
 @Module({
   imports: [
@@ -81,6 +82,7 @@ import { UpdatesModule } from './updates/updates.module.js';
     CierresModule,
     LicensingModule,
     UpdatesModule,
+    InstallationModule,
   ],
   controllers: [AppController],
   providers: [

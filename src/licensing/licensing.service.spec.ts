@@ -113,10 +113,10 @@ describe('LicensingService (F2.8)', () => {
   it('rechaza token con claims no coincidentes (sub/instance_id)', async () => {
     const expSec = Math.floor(Date.now() / 1000) + 3600;
     const badSub = await signToken({ sub: 'other', instance_id: 'inst-1', license_status: 'ACTIVE' }, { expSec });
-    await expect(service.verifyToken(badSub, { machineIdHash: 'machine-hash', instanceId: 'inst-1' })).rejects.toThrow(/sub/i);
+    await expect(service.verifyAndDecodeSignedToken(badSub, { machineIdHash: 'machine-hash', instanceId: 'inst-1' }, 'verify')).rejects.toThrow(/sub|Hardware ID|instalación/i);
 
     const badInst = await signToken({ sub: 'machine-hash', instance_id: 'other', license_status: 'ACTIVE' }, { expSec });
-    await expect(service.verifyToken(badInst, { machineIdHash: 'machine-hash', instanceId: 'inst-1' })).rejects.toThrow(/instance_id/i);
+    await expect(service.verifyAndDecodeSignedToken(badInst, { machineIdHash: 'machine-hash', instanceId: 'inst-1' }, 'verify')).rejects.toThrow(/instance_id|instancia|instalación/i);
   });
 
   it('token expirado: verifyNow falla y evaluateAccess bloquea en grace/strict (fail-closed) tras gracia agotada', async () => {
@@ -226,4 +226,161 @@ describe('LicensingService (F2.8)', () => {
     const serverTime = new Date('2026-11-11T12:00:00.000Z'); // server muy adelante
     expect(service.detectClockTamper(now, serverTime, null)).toBe(true);
   });
-});
+
+  describe('activateWithToken / getActivationStatusView (activación offline por JWS)', () => {
+    it('activa correctamente con JWS válido+biding, persiste estado y expone IDs/días restantes', async () => {
+      const validUntilIso = '2026-12-11T12:00:00.000Z';
+      const token = await signToken(
+        {
+          sub: 'machine-hash',
+          instance_id: 'inst-1',
+          license_status: 'ACTIVE',
+          plan: 'enterprise',
+          valid_from: '2026-11-01T00:00:00.000Z',
+          valid_until: validUntilIso,
+          grace_hours: 72,
+          iat: Math.floor(Date.now() / 1000),
+          server_time: '2026-11-11T12:00:00.000Z',
+          jti: 'act-1',
+        },
+        { expSec: Math.floor(new Date(validUntilIso).getTime() / 1000) },
+      );
+
+      const res = await service.activateWithToken(token);
+      expect(res.ok).toBe(true);
+      expect(res.message).toMatch(/activada correctamente/i);
+      expect(state.licenseStatus).toBe('ACTIVE');
+      expect(state.planCode).toBe('enterprise');
+      expect(state.lastTokenJws).toBe(token);
+      expect(state.lastError).toBeNull();
+      expect(state.lastSuccessfulCheckAt).toBeInstanceOf(Date);
+      expect(new Date(state.validUntil).toISOString()).toBe(validUntilIso);
+      expect(new Date(state.graceDeadlineAt).toISOString()).toBe(new Date(new Date(validUntilIso).getTime() + 72 * 3600_000).toISOString());
+
+      const view = await service.getActivationStatusView();
+      expect(view.blocked).toBe(false);
+      expect(view.machineIdHash).toBe('machine-hash');
+      expect(view.instanceId).toBe('inst-1');
+      expect(view.daysRemaining).toBe(30);
+      expect(view.validFrom).toBe('2026-11-01T00:00:00.000Z');
+      expect(view.planCode).toBe('enterprise');
+    });
+
+    it('rechaza mismatch de Hardware ID (sub) y de instance_id con mensajes sanitizados', async () => {
+      const base = {
+        license_status: 'ACTIVE',
+        valid_until: '2026-12-11T12:00:00.000Z',
+        grace_hours: 72,
+      };
+      const badSub = await signToken({ ...base, sub: 'other', instance_id: 'inst-1' }, { expSec: Math.floor(Date.now() / 1000) + 3600 });
+      const r1 = await service.activateWithToken(badSub);
+      expect(r1.ok).toBe(false);
+      expect(r1.message).toMatch(/Hardware ID no coincide/i);
+      expect(state.lastError).toMatch(/Hardware ID no coincide/i);
+
+      const badInst = await signToken({ ...base, sub: 'machine-hash', instance_id: 'other' }, { expSec: Math.floor(Date.now() / 1000) + 3600 });
+      const r2 = await service.activateWithToken(badInst);
+      expect(r2.ok).toBe(false);
+      expect(r2.message).toMatch(/ID de instancia no coincide/i);
+    });
+
+    it('rechaza firma inválida/mal formada (sin depender de verificación online)', async () => {
+      (fetch as any).mockRejectedValue(new Error('offline'));
+      const r1 = await service.activateWithToken('not.a.jwt');
+      expect(r1.ok).toBe(false);
+      expect(r1.message).toMatch(/firma inválida|formato incorrecto/i);
+      expect(fetch).not.toHaveBeenCalled();
+
+      const { privateKey: otherPriv } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+      const otherPem = otherPriv.export({ type: 'pkcs8', format: 'pem' }).toString();
+      const pk = await importPKCS8(otherPem, 'RS256');
+      const forged = await new SignJWT({ sub: 'machine-hash', instance_id: 'inst-1', license_status: 'ACTIVE', valid_until: '2026-12-11T12:00:00.000Z' })
+        .setProtectedHeader({ alg: 'RS256' })
+        .setIssuedAt(Math.floor(Date.now() / 1000))
+        .setExpirationTime(Math.floor(Date.now() / 1000) + 3600)
+        .sign(pk);
+      const r2 = await service.activateWithToken(forged);
+      expect(r2.ok).toBe(false);
+      expect(r2.message).toMatch(/firma inválida|formato incorrecto/i);
+    });
+
+    it('acepta criptográficamente pero deja bloqueado si estado es REVOKED o SUSPENDED', async () => {
+      const revoked = await signToken(
+        { sub: 'machine-hash', instance_id: 'inst-1', license_status: 'REVOKED', valid_until: '2026-12-11T12:00:00.000Z', grace_hours: 72 },
+        { expSec: Math.floor(new Date('2026-12-11T12:00:00.000Z').getTime() / 1000) },
+      );
+      const r1 = await service.activateWithToken(revoked);
+      expect(r1.ok).toBe(false);
+      expect(r1.status.blocked).toBe(true);
+      expect(r1.status.licenseStatus).toBe('REVOKED');
+      expect(String(r1.status.blockReason || r1.message)).toMatch(/revocad/i);
+
+      const suspended = await signToken(
+        { sub: 'machine-hash', instance_id: 'inst-1', license_status: 'SUSPENDED', valid_until: '2026-12-11T12:00:00.000Z', grace_hours: 72 },
+        { expSec: Math.floor(new Date('2026-12-11T12:00:00.000Z').getTime() / 1000) },
+      );
+      const r2 = await service.activateWithToken(suspended);
+      expect(r2.ok).toBe(false);
+      expect(r2.status.blocked).toBe(true);
+      expect(String(r2.status.blockReason || r2.message)).toMatch(/suspendid/i);
+    });
+
+    it('token expirado/vencido sin gracia deja bloqueado; token vacío se rechaza', async () => {
+      const rEmpty = await service.activateWithToken('   ');
+      expect(rEmpty.ok).toBe(false);
+      expect(rEmpty.message).toMatch(/pegar una licencia|licencia válida/i);
+
+      // expirado hace tiempo (exp y valid_until pasados, sin gracia)
+      const past = '2026-10-01T00:00:00.000Z';
+      const expired = await signToken(
+        { sub: 'machine-hash', instance_id: 'inst-1', license_status: 'ACTIVE', valid_until: past, grace_hours: 0 },
+        { expSec: Math.floor(new Date(past).getTime() / 1000) },
+      );
+      const r = await service.activateWithToken(expired);
+      expect(r.ok).toBe(false);
+      expect(String(r.message)).toMatch(/expir|vencid|fecha|vigenc/i);
+    });
+
+    it('acepta en activación token con exp JWS corto si valid_until+gracia siguen vigentes (contrato issue-token)', async () => {
+      const validUntilIso = '2026-12-11T12:00:00.000Z';
+      const shortExp = Math.floor(Date.now() / 1000) - 60; // exp JWS ya vencido
+      const token = await signToken(
+        {
+          sub: 'machine-hash',
+          instance_id: 'inst-1',
+          license_status: 'ACTIVE',
+          plan: 'pro',
+          valid_until: validUntilIso,
+          grace_hours: 72,
+          iat: Math.floor(Date.now() / 1000) - 7200,
+        },
+        { expSec: shortExp },
+      );
+
+      const res = await service.activateWithToken(token);
+      expect(res.ok).toBe(true);
+      expect(res.status.blocked).toBe(false);
+      expect(state.licenseStatus).toBe('ACTIVE');
+      expect(new Date(state.validUntil).toISOString()).toBe(validUntilIso);
+    });
+
+    it('getActivationStatusView deriva IDs desde machineIdService cuando faltan y calcula daysRemaining', async () => {
+      state = makeState({
+        instanceId: null,
+        machineIdHash: null,
+        licenseStatus: 'ACTIVE',
+        validUntil: new Date('2026-11-21T12:00:00.000Z'),
+        graceDeadlineAt: new Date('2026-11-24T12:00:00.000Z'),
+        lastTokenJws: null,
+      });
+      stateService.getState.mockImplementation(async () => state);
+
+      const view = await service.getActivationStatusView();
+      expect(view.machineIdHash).toBe('machine-hash');
+      expect(view.instanceId).toBe('inst-1');
+      expect(view.daysRemaining).toBe(10);
+      expect(view.blocked).toBe(false);
+      expect(view.lastError).toBeNull();
+    });
+  });
+});
