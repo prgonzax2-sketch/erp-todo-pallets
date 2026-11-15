@@ -2,6 +2,13 @@
 
 > Estado operativo resumido. Memoria vigente: `MEMORY.md`. Instrucciones: `AGENTS.md`. Actualizado: **2026-11-12 (SDD Reportes T1-T4 + instalador offline/devops, rama `feature/agente-licencia-activacion-ui`, push solicitado)**. Sistema **estable** (dev `:3000`, `TYPEORM_SYNCHRONIZE=true` en runtime dev).
 
+## Sesión 2026-11-15 — Instalador Windows: nombre de empresa, firewall LAN, resiliencia Docker/offline (rama `fix/agente-instalador-offline-shortcuts`, sin push)
+
+- **Fixes `setup.iss` + `bootstrap.ps1` (commit local `c0339ed`):** el instalador pide **nombre de empresa/cliente** (Inno custom page) y deriva/configura la URL propia por instalación (`https://<slug>-erp.sistemaaserradero.com.ar`) → preconfigura `PUBLIC_BASE_URL` en `.env` y persiste `license/server_public_url.txt` y `license/company_name.txt` (idempotente, sin sobreescribir si ya existen; inputs sobreviven reanudación tras reinicio WSL vía `installer-input.txt`). Crea/asegura accesos directos `.url` (escritorio común/menú) con puerto correcto. Crea/actualiza regla de **Firewall de Windows** de entrada TCP `APP_PORT` (perfiles Private,Domain) para acceso desde otras PCs de la red/LAN; acceso remoto fuera de LAN sigue por túnel/URL pública (HTTPS), no por apertura de puertos del router. Carga automática de imágenes offline `.tar` desde carpetas `images` comunes y `docker compose up -d` resiliente (`--pull always` → sin pull → `--pull missing`) para online/offline/local.
+- **Artefacto:** `.exe` recompilado (ISCC) `dist-installer/SistemaAserraderoERP-Setup.exe` (15/11/2026 09:49:34). **No integrado en `main`/`v1.0.0` ni en GHCR/paquete oficial** (pendiente merge/push/tag/rebuild si se desea publicar).
+
+---
+
 ## Sesión 2026-11-14 — URL pública propia por instalación/servidor (SDD + implementación, rama `feat/agente-per-install-public-url`)
 
 **Objetivo:** cada instalación/servidor ERP configura y persiste su propia URL de acceso remoto (subdominio por cliente bajo `sistemaaserradero.com.ar`) al instalar/configurar, diferenciando LAN vs remoto, sin romper licenciamiento.
