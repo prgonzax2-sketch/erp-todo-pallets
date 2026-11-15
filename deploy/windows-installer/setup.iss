@@ -39,14 +39,14 @@ Source: "bootstrap.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "actualizar.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{commondesktop}\Sistema Aserradero ERP"; Filename: "http://localhost:PORT_PLACEHOLDER"; Tasks: desktopicon
-Name: "{group}\Sistema Aserradero ERP"; Filename: "http://localhost:PORT_PLACEHOLDER"
+Name: "{commondesktop}\Sistema Aserradero ERP.url"; Filename: "http://localhost:PORT_PLACEHOLDER"; Tasks: desktopicon
+Name: "{group}\Sistema Aserradero ERP.url"; Filename: "http://localhost:PORT_PLACEHOLDER"
 Name: "{group}\Actualizar Sistema Aserradero ERP"; Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\actualizar.ps1"""; WorkingDir: "{app}"
 
 [Run]
 ; Se ejecuta visible para que el usuario vea el progreso en tiempo real (el detalle completo queda en bootstrap.log).
 Filename: "powershell.exe"; \
-  Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\bootstrap.ps1"" -DesktopShortcut ""{commondesktop}\Sistema Aserradero ERP.url"" -GroupShortcut ""{group}\Sistema Aserradero ERP.url"""; \
+  Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\bootstrap.ps1"" -DesktopShortcut ""{commondesktop}\Sistema Aserradero ERP.url"" -GroupShortcut ""{group}\Sistema Aserradero ERP.url"" -SourceDir ""{src}"" {code:GetBootstrapExtraParams}"; \
   WorkingDir: "{app}"; \
   Flags: waituntilterminated; \
   StatusMsg: "Configurando Docker, entorno y servicios (puede tardar varios minutos). Se abrirá una ventana con el progreso..."
@@ -61,6 +61,46 @@ Type: files; Name: "{app}\bootstrap.log"
 Type: files; Name: "{app}\actualizar.log"
 
 [Code]
+var
+  CompanyPage: TInputQueryWizardPage;
+
+function EscapePowerShellArg(const S: String): String;
+var
+  R: String;
+begin
+  R := S;
+  StringChangeEx(R, '''', '''''', True);
+  Result := R;
+end;
+
+procedure InitializeWizard;
+begin
+  CompanyPage := CreateInputQueryPage(wpSelectTasks,
+    'Datos de la empresa / instalación',
+    'Identificación del cliente y acceso remoto',
+    'Ingrese el nombre de la empresa o cliente. Se usará para configurar la URL propia de acceso remoto de esta instalación (subdominio). Puede ajustarla luego en el asistente de configuración del sistema.');
+  CompanyPage.Add('Nombre de la empresa o cliente:', False);
+  CompanyPage.Values[0] := '';
+end;
+
+function GetCompanyNameParam(Param: String): String;
+begin
+  if (CompanyPage <> nil) then
+    Result := Trim(CompanyPage.Values[0])
+  else
+    Result := '';
+end;
+
+function GetBootstrapExtraParams(Param: String): String;
+var
+  C: String;
+begin
+  Result := '';
+  C := GetCompanyNameParam('');
+  if C <> '' then
+    Result := '-CompanyName ''' + EscapePowerShellArg(C) + '''';
+end;
+
 // Notas:
 // - bootstrap.ps1: instala/inicia Docker Desktop si es necesario, genera .env, levanta el stack (sin credenciales embebidas; la imagen debe ser accesible/pública o proveerse offline).
 // - actualizar.ps1: permite descargar y aplicar actualizaciones de la imagen configurada en docker-compose.prod.yml.

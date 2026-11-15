@@ -3,7 +3,10 @@
 # Flujo: [1] Virtualizacion -> [2] WSL 2 (+ reinicio unico si aplica) -> [3] Docker Desktop -> [4+] Configuracion y arranque.
 param(
     [string]$DesktopShortcut = "",
-    [string]$GroupShortcut = ""
+    [string]$GroupShortcut = "",
+    [string]$CompanyName = "",
+    [string]$PublicBaseUrl = "",
+    [string]$SourceDir = ""
 )
 
 $ErrorActionPreference = 'Stop'
@@ -129,6 +132,65 @@ function Remove-ResumeRunOnce {
     try {
         Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce' -Name 'SistemaAserraderoERPBootstrap' -ErrorAction SilentlyContinue
     } catch { }
+}
+
+function Set-UrlShortcut {
+    param([string]$Path, [string]$Url)
+    if ([string]::IsNullOrWhiteSpace($Path) -or [string]::IsNullOrWhiteSpace($Url)) { return $false }
+    try {
+        $dir = Split-Path -Parent $Path
+        if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        $content = "[InternetShortcut]`r`nURL=$Url`r`n"
+        Set-Content -Path $Path -Value $content -Encoding ASCII -Force
+        return $true
+    } catch {
+        Write-Log "No se pudo crear/actualizar acceso directo: $Path. $($_.Exception.Message)" 'WARN'
+        return $false
+    }
+}
+
+function Ensure-AppShortcuts {
+    param([string]$AppDir, [string]$AppPort, [string]$DesktopShortcut, [string]$GroupShortcut)
+    $url = "http://localhost:$AppPort/?setup=1"
+    $targets = @()
+    if ($DesktopShortcut) { $targets += $DesktopShortcut }
+    if ($GroupShortcut) { $targets += $GroupShortcut }
+    # Asegurar accesos directos estándar (robustez si Inno no los creó/actualizó)
+    try { $targets += (Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'Sistema Aserradero ERP.url') } catch { }
+    try { $targets += (Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'Sistema Aserradero ERP\Sistema Aserradero ERP.url') } catch { }
+    $unique = $targets | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+    foreach ($t in $unique) {
+        if (Set-UrlShortcut -Path $t -Url $url) { Write-Log "Acceso directo listo: $t -> $url" }
+    }
+}
+
+function Convert-ToSlug {
+    param([string]$Text)
+    if ([string]::IsNullOrWhiteSpace($Text)) { return '' }
+    $s = $Text.Trim().ToLowerInvariant()
+    # Normalizar acentos comunes
+    $replacements = @{
+        'á'='a'; 'é'='e'; 'í'='i'; 'ó'='o'; 'ú'='u'; 'ü'='u'; 'ñ'='n'
+        'Á'='a'; 'É'='e'; 'Í'='i'; 'Ó'='o'; 'Ú'='u'; 'Ü'='u'; 'Ñ'='n'
+    }
+    foreach ($k in $replacements.Keys) { $s = $s.Replace($k, $replacements[$k]) }
+    $s = [regex]::Replace($s, '[^a-z0-9]+', '-')
+    $s = [regex]::Replace($s, '-{2,}', '-')
+    $s = $s.Trim('-')
+    if ($s.Length -gt 40) { $s = $s.Substring(0,40).Trim('-') }
+    return $s
+}
+
+function Get-DerivedPublicBaseUrl {
+    param([string]$CompanyName, [string]$ExplicitUrl)
+    if (-not [string]::IsNullOrWhiteSpace($ExplicitUrl)) {
+        $u = $ExplicitUrl.Trim().TrimEnd('/')
+        if ($u -match '^https://') { return $u }
+        if ($u -match '^[a-z0-9.-]+$') { return ("https://" + $u.TrimEnd('/')) }
+    }
+    $slug = Convert-ToSlug -Text $CompanyName
+    if ([string]::IsNullOrWhiteSpace($slug)) { return '' }
+    return "https://$slug-erp.sistemaaserradero.com.ar"
 }
 
 function Test-IsVirtualizationEnabled {
@@ -280,12 +342,32 @@ try {
     Set-Location -Path $AppDir
     $script:LogPath = Join-Path $AppDir 'bootstrap.log'
 
+    # Persistir/recuperar datos ingresados en el instalador (sobrevive reanudación tras reinicio WSL)
+    $installInputFile = Join-Path $AppDir 'installer-input.txt'
+    try {
+        $hasNewInput = (-not [string]::IsNullOrWhiteSpace($CompanyName)) -or (-not [string]::IsNullOrWhiteSpace($PublicBaseUrl)) -or (-not [string]::IsNullOrWhiteSpace($SourceDir))
+        if ($hasNewInput) {
+            @("CompanyName=$CompanyName", "PublicBaseUrl=$PublicBaseUrl", "SourceDir=$SourceDir") | Set-Content -Path $installInputFile -Encoding UTF8
+        } elseif (Test-Path $installInputFile) {
+            $ii = Get-Content -Path $installInputFile -ErrorAction SilentlyContinue
+            foreach ($line in $ii) {
+                if ($line -match '^CompanyName=(.*)$' -and [string]::IsNullOrWhiteSpace($CompanyName)) { $CompanyName = $Matches[1].Trim() }
+                if ($line -match '^PublicBaseUrl=(.*)$' -and [string]::IsNullOrWhiteSpace($PublicBaseUrl)) { $PublicBaseUrl = $Matches[1].Trim() }
+                if ($line -match '^SourceDir=(.*)$' -and [string]::IsNullOrWhiteSpace($SourceDir)) { $SourceDir = $Matches[1].Trim() }
+            }
+        }
+    } catch { }
+
+    $derivedPublicBaseUrl = Get-DerivedPublicBaseUrl -CompanyName $CompanyName -ExplicitUrl $PublicBaseUrl
+
     Write-Host ""
     Write-Host "Sistema Aserradero ERP - Instalacion/Configuracion automatica" -ForegroundColor Green
     Write-Host "Esta ventana muestra el progreso. Puede tardar varios minutos. No la cierre." -ForegroundColor Yellow
     Write-Host "Registro detallado: $script:LogPath" -ForegroundColor Gray
     Write-Host ""
     Write-Log "Inicio bootstrap. Dir: $AppDir"
+    if (-not [string]::IsNullOrWhiteSpace($CompanyName)) { Write-Log "Empresa/cliente: $CompanyName" }
+    if (-not [string]::IsNullOrWhiteSpace($derivedPublicBaseUrl)) { Write-Log "URL publica propia (derivada/configurada): $derivedPublicBaseUrl" }
 
     # [1] Verificar Virtualizacion de Hardware
     Write-Phase "[1/6] Verificando virtualizacion de hardware..."
@@ -339,6 +421,7 @@ try {
     $defaultPublicBaseUrl = ''
     if (-not [string]::IsNullOrWhiteSpace($env:PUBLIC_BASE_URL)) { $defaultPublicBaseUrl = $env:PUBLIC_BASE_URL.Trim() }
     elseif (-not [string]::IsNullOrWhiteSpace($env:SERVER_PUBLIC_URL)) { $defaultPublicBaseUrl = $env:SERVER_PUBLIC_URL.Trim() }
+    elseif (-not [string]::IsNullOrWhiteSpace($derivedPublicBaseUrl)) { $defaultPublicBaseUrl = $derivedPublicBaseUrl }
     if (-not (Test-Path $envPath)) {
         $content = Get-Content -Path $examplePath -Raw -Encoding UTF8
         $dbPass = New-RandomSecret -Bytes 24
@@ -359,9 +442,45 @@ try {
             & icacls $envPath /inheritance:r /grant:r "${user}:(R,W)" *> $null
         } catch { }
         Write-Log ".env generado con credenciales seguras y LICENSE_SERVER_URL=$defaultLicenseServerUrl."
+        if ($defaultPublicBaseUrl) { Write-Log "PUBLIC_BASE_URL preconfigurada: $defaultPublicBaseUrl" }
     } else {
         Write-Log ".env existente conservado (idempotente)."
+        # Si .env existe pero no tiene URL publica configurada y el instalador recibio empresa/URL, completarla
+        try {
+            $envContentTmp = Get-Content -Path $envPath -Raw -Encoding UTF8
+            $mPub = [regex]::Match($envContentTmp, '(?m)^\s*PUBLIC_BASE_URL\s*=\s*(.*)$')
+            $curPub = ''
+            if ($mPub.Success) { $curPub = $mPub.Groups[1].Value.Trim().Trim('"').Trim("'") }
+            if ([string]::IsNullOrWhiteSpace($curPub) -and -not [string]::IsNullOrWhiteSpace($derivedPublicBaseUrl)) {
+                $envContentTmp = Set-EnvValue -Content $envContentTmp -Key 'PUBLIC_BASE_URL' -Value $derivedPublicBaseUrl
+                Set-Content -Path $envPath -Value $envContentTmp -Encoding UTF8
+                Write-Log "PUBLIC_BASE_URL completada en .env existente: $derivedPublicBaseUrl"
+            }
+        } catch { Write-Log "No se pudo actualizar PUBLIC_BASE_URL en .env existente: $($_.Exception.Message)" 'WARN' }
     }
+
+    # Persistir identidad/URL propia y nombre de empresa para la app (license/) si se proporcionaron
+    try {
+        $licenseDirState = Join-Path $AppDir 'license'
+        if (-not (Test-Path $licenseDirState)) { New-Item -ItemType Directory -Path $licenseDirState -Force | Out-Null }
+        if (-not [string]::IsNullOrWhiteSpace($derivedPublicBaseUrl)) {
+            $serverUrlFile = Join-Path $licenseDirState 'server_public_url.txt'
+            if (-not (Test-Path $serverUrlFile)) {
+                Set-Content -Path $serverUrlFile -Value $derivedPublicBaseUrl -Encoding ASCII
+                Write-Log "URL propia del servidor persistida en license/server_public_url.txt"
+            } else {
+                Write-Log "server_public_url.txt ya existe; se conserva (configuracion previa)."
+            }
+        }
+        if (-not [string]::IsNullOrWhiteSpace($CompanyName)) {
+            $companyFile = Join-Path $licenseDirState 'company_name.txt'
+            if (-not (Test-Path $companyFile)) {
+                Set-Content -Path $companyFile -Value $CompanyName -Encoding UTF8
+                Write-Log "Nombre de empresa/cliente persistido en license/company_name.txt"
+            }
+        }
+        try { Remove-Item $installInputFile -Force -ErrorAction SilentlyContinue } catch { }
+    } catch { Write-Log "No se pudo persistir identidad de instalacion (empresa/URL): $($_.Exception.Message)" 'WARN' }
 
     try {
         $licenseUrl = ""
@@ -376,21 +495,63 @@ try {
     } catch { Write-Log "No se pudo verificar LICENSE_SERVER_URL: $($_.Exception.Message)" 'WARN' }
 
     # [5] Levantar stack
-    Write-Phase "[5/6] Descargando e iniciando servicios Docker (docker compose up -d)..."
+    Write-Phase "[5/6] Cargando imagenes (si aplica) e iniciando servicios Docker..."
     Write-Host "  - Puede tardar varios minutos segun la conexion e imagenes. Detalle en bootstrap.log." -ForegroundColor Gray
     $composeFile = Join-Path $AppDir 'docker-compose.prod.yml'
     if (-not (Test-Path $composeFile)) { throw "No se encontro docker-compose.prod.yml en $AppDir." }
     Refresh-DockerPath
     if (-not (Test-DockerEngineReady)) { throw "Docker no esta activo. No se puede ejecutar docker compose." }
 
-    $composeCmdDisplay = 'docker compose -f "docker-compose.prod.yml" --env-file ".env" up -d --pull always'
-    $composeArgs = @('compose', '-f', 'docker-compose.prod.yml', '--env-file', '.env', 'up', '-d', '--pull', 'always')
-    $maxAttempts = 3
+    # Intentar carga offline de imagenes (.tar) si existen en ubicaciones comunes (instalacion offline)
+    try {
+        $srcCandidates = @($SourceDir)
+        if ($SourceDir) { try { $srcCandidates += (Split-Path -Parent $SourceDir) } catch { } }
+        $imageDirs = @()
+        foreach ($base in @($AppDir, (Split-Path -Parent $AppDir)) + $srcCandidates) {
+            if (-not $base) { continue }
+            $imageDirs += (Join-Path $base 'images')
+            $imageDirs += (Join-Path $base 'dist-installer\images')
+        }
+        $imageDirs = $imageDirs | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+        $loadedAny = $false
+        foreach ($imgDir in $imageDirs) {
+            $tarFiles = @(Get-ChildItem -LiteralPath $imgDir -Filter '*.tar' -File -ErrorAction SilentlyContinue)
+            foreach ($tar in $tarFiles) {
+                # Evitar recargar si la imagen principal ya existe (best-effort por nombre comun)
+                $needLoad = $true
+                try {
+                    & docker image inspect ghcr.io/prgonzax2-sketch/erp-todo-pallets:v1.0.0 *> $null
+                    if ($LASTEXITCODE -eq 0 -and $tar.Name -match 'erp-todo-pallets') { $needLoad = $false }
+                } catch { }
+                if (-not $needLoad) { Write-Log "Imagen ERP ya disponible localmente; se omite carga de $($tar.Name)."; continue }
+                Write-Log "Cargando imagen offline: $($tar.FullName)"
+                $prevEap = $ErrorActionPreference
+                $ErrorActionPreference = 'Continue'
+                $loadOut = & docker load -i $tar.FullName 2>&1
+                $loadCode = $LASTEXITCODE
+                $ErrorActionPreference = $prevEap
+                $loadText = ($loadOut | ForEach-Object { $_.ToString() }) -join "`r`n"
+                if ($loadText) { try { Add-Content -Path $script:LogPath -Value "--- docker load $($tar.Name) (codigo $loadCode) ---`r`n$loadText" -Encoding UTF8 } catch { } }
+                if ($loadCode -eq 0) { $loadedAny = $true; Write-Log "Imagen cargada: $($tar.Name)" }
+                else { Write-Log "Fallo al cargar imagen $($tar.Name) (codigo $loadCode). Se continuara con compose." 'WARN' }
+            }
+        }
+        if (-not $loadedAny) { Write-Log "No se cargaron imagenes .tar (no se encontraron en ubicaciones comunes o ya estaban disponibles)." }
+    } catch { Write-Log "Error en carga offline de imagenes: $($_.Exception.Message)" 'WARN' }
+
+    $composeBase = @('compose', '-f', 'docker-compose.prod.yml', '--env-file', '.env', 'up', '-d')
+    $composeVariants = @(
+        @{ Name = 'online (pull always)'; Args = ($composeBase + @('--pull', 'always')) },
+        @{ Name = 'sin pull (imagenes locales)'; Args = $composeBase },
+        @{ Name = 'pull missing'; Args = ($composeBase + @('--pull', 'missing')) }
+    )
     $composeOk = $false
     $lastExitCode = 1
     $lastOutput = ""
-    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
-        Write-Log "Iniciando servicios (intento $attempt de $maxAttempts): $composeCmdDisplay"
+    foreach ($variant in $composeVariants) {
+        $composeArgs = $variant.Args
+        $composeCmdDisplay = 'docker ' + ($composeArgs -join ' ')
+        Write-Log "Iniciando servicios: $composeCmdDisplay"
         $prevEap = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
         $outputLines = & docker @composeArgs 2>&1
@@ -399,23 +560,29 @@ try {
         $lastOutput = ($outputLines | ForEach-Object { $_.ToString() }) -join "`r`n"
         if ($lastOutput) {
             try {
-                Add-Content -Path $script:LogPath -Value "--- Salida docker compose (intento $attempt, codigo $lastExitCode) ---" -Encoding UTF8
+                Add-Content -Path $script:LogPath -Value "--- Salida docker compose [$($variant.Name)] (codigo $lastExitCode) ---" -Encoding UTF8
                 Add-Content -Path $script:LogPath -Value $lastOutput -Encoding UTF8
-                Add-Content -Path $script:LogPath -Value "--- Fin salida intento $attempt ---" -Encoding UTF8
+                Add-Content -Path $script:LogPath -Value "--- Fin salida [$($variant.Name)] ---" -Encoding UTF8
             } catch { }
         }
-        if ($lastExitCode -eq 0) { $composeOk = $true; break }
-        Write-Log "docker compose fallo en intento $attempt con codigo $lastExitCode." 'WARN'
-        if ($attempt -lt $maxAttempts) {
-            Start-Sleep -Seconds 5
-            Refresh-DockerPath
-        }
+        if ($lastExitCode -eq 0) { $composeOk = $true; Write-Log "Servicios iniciados correctamente ($($variant.Name))."; break }
+        Write-Log "docker compose fallo ($($variant.Name), codigo $lastExitCode)." 'WARN'
+        Refresh-DockerPath
+        Start-Sleep -Seconds 3
     }
     if (-not $composeOk) {
-        Write-Log "Fallo persistente: $composeCmdDisplay (codigo $lastExitCode)" 'ERROR'
-        throw "No se pudo iniciar el sistema tras $maxAttempts intentos (docker compose codigo $lastExitCode). Revise bootstrap.log."
+        Write-Log "Fallo persistente al iniciar servicios (ultimo codigo $lastExitCode)" 'ERROR'
+        $composeLogTail = ""
+        try { $composeLogTail = $lastOutput } catch { }
+        $hint = "No se pudo iniciar el sistema con Docker Compose (codigo $lastExitCode).`n`n" +
+                "Posibles causas:`n" +
+                "- Instalacion ONLINE: requiere internet para descargar la imagen desde GHCR (y que la publicacion este disponible).`n" +
+                "- Instalacion OFFLINE: debe existir la carpeta 'images' con el archivo erp-todo-pallets-local.tar junto al instalador (.exe) o en la carpeta de instalacion; el instalador intentara cargarla automaticamente.`n" +
+                "- Docker Desktop debe estar en ejecucion y funcionando correctamente.`n`n" +
+                "Revise bootstrap.log en la carpeta de instalacion para el detalle del error."
+        if ($composeLogTail) { Write-Host ""; Write-Host "--- Ultima salida de Docker Compose ---" -ForegroundColor Yellow; Write-Host $composeLogTail }
+        throw $hint
     }
-    Write-Log "Servicios iniciados correctamente."
 
     # Accesos directos (puerto)
     $appPort = "3000"
@@ -433,6 +600,29 @@ try {
                     Write-Log "Acceso directo actualizado: $sc"
                 }
             } catch { Write-Log "No se pudo actualizar acceso directo: $sc. $($_.Exception.Message)" 'WARN' }
+        }
+    }
+    # Crear/asegurar accesos directos con URL final correcta (incluye escritorio común)
+    Ensure-AppShortcuts -AppDir $AppDir -AppPort $appPort -DesktopShortcut $DesktopShortcut -GroupShortcut $GroupShortcut
+
+    # Regla de Firewall de Windows para permitir acceso desde otras PCs de la red (LAN/planta) al puerto del ERP
+    try {
+        $fwName = "Sistema Aserradero ERP (TCP $appPort)"
+        $existingFw = Get-NetFirewallRule -DisplayName $fwName -ErrorAction SilentlyContinue
+        if ($existingFw) {
+            try { Remove-NetFirewallRule -DisplayName $fwName -ErrorAction SilentlyContinue } catch { }
+        }
+        New-NetFirewallRule -DisplayName $fwName -Direction Inbound -Action Allow -Protocol TCP -LocalPort ([int]$appPort) -Profile Private,Domain -Enabled True | Out-Null
+        Write-Log "Regla de firewall creada/actualizada: $fwName (perfiles Private,Domain)."
+        Write-Log "Para acceso desde otras redes fuera de la LAN use la URL publica del tunel (HTTPS) configurada para esta instalacion."
+    } catch {
+        try {
+            & netsh advfirewall firewall delete rule name="$fwName" *> $null
+            & netsh advfirewall firewall add rule name="$fwName" dir=in action=allow protocol=TCP localport=$appPort profile=private,domain *> $null
+            if ($LASTEXITCODE -eq 0) { Write-Log "Regla de firewall creada/actualizada via netsh: $fwName." }
+            else { Write-Log "No se pudo crear automaticamente la regla de firewall (puerto $appPort). Permita el puerto TCP $appPort en el Firewall de Windows para acceso desde otras PCs." 'WARN' }
+        } catch {
+            Write-Log "No se pudo crear automaticamente la regla de firewall (puerto $appPort): $($_.Exception.Message)" 'WARN'
         }
     }
 
