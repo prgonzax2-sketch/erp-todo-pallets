@@ -5082,42 +5082,56 @@
 
 
 
+        function esProductoPallet(producto) {
+            return !!(producto && (producto.esPallet || producto.tipo === 'PALLET'));
+        }
+
+        function getProductoProduccionPorIndice(index) {
+            const i = Number(index);
+            if (!Number.isInteger(i) || i < 0) return productosProduccion[0] || null;
+            return productosProduccion[i] || productosProduccion[0] || null;
+        }
+
         async function cargarProductosProduccion() {
 
             try {
 
-                const token = localStorage.getItem('token');
+                const authToken = localStorage.getItem('token');
 
-                const res = await fetch(`${API_URL}/produccion/pallet-recipes`, { headers: { 'Authorization': `Bearer ${token}` }});
-
-                if (!res.ok) return;
-
-                const pallets = await res.json();
+                const res = await fetch(`${API_URL}/produccion/pallet-recipes`, { headers: { 'Authorization': `Bearer ${authToken}` }});
 
                 const base = [
-
                     { nombre: 'Madera aserrada' },
-
                     { nombre: 'Tabla' },
-
                     { nombre: 'Taco pie' },
-
                     { nombre: 'Tablero' },
-
                     { nombre: 'Panel' }
-
                 ];
 
-                productosProduccion = [...base, ...pallets.map(p => ({ nombre: p.nombre }))];
+                let pallets = [];
+                if (res && res.ok) {
+                    const data = await res.json();
+                    pallets = Array.isArray(data) ? data.map(p => ({
+                        nombre: p.nombre,
+                        esPallet: true,
+                        palletId: p.id,
+                        especiePallet: p.especieMadera || ''
+                    })) : [];
+                }
+
+                const prev = (() => { try { return JSON.parse(localStorage.getItem('productosProduccion') || '[]'); } catch (e) { return []; } })();
+                const prevArr = Array.isArray(prev) ? prev : [];
+                const custom = prevArr.filter(p => p && p.nombre && !p.esPallet && !base.some(b => b.nombre === p.nombre));
+
+                productosProduccion = [...base, ...custom, ...pallets];
+
+                try { localStorage.setItem('productosProduccion', JSON.stringify(productosProduccion)); } catch (e) {}
 
                 document.querySelectorAll('.prod-producto').forEach(select => {
-
                     const currentVal = select.value;
-
                     select.innerHTML = opcionesProductos();
-
-                    select.value = currentVal;
-
+                    if (currentVal !== '' && currentVal != null) select.value = currentVal;
+                    if (typeof prodOnProductoChange === 'function') prodOnProductoChange(select);
                 });
 
             } catch (e) { console.error('Error cargando productos:', e); }
@@ -5149,6 +5163,63 @@
 
         function quitarProductoCatalogo(index) { if (productosProduccion.length <= 1) return alert('Debe quedar al menos un producto.'); productosProduccion.splice(index, 1); guardarCatalogoProductos(); pintarCatalogoProductos(); document.querySelectorAll('.prod-producto').forEach(select => { select.innerHTML = opcionesProductos(); }); }
 
+        function prodConfigurarFilaComoPallet(mainRow, esPallet, producto) {
+            if (!mainRow) return;
+            const set = (sel, val, dis, ph) => {
+                const el = mainRow.querySelector(sel);
+                if (!el) return;
+                if (val !== undefined && val !== null) el.value = val;
+                el.disabled = !!dis;
+                if (ph !== undefined) el.placeholder = ph;
+                el.style.opacity = dis ? '0.45' : '';
+            };
+            if (esPallet) {
+                const especie = (producto && producto.especiePallet) ? producto.especiePallet : 'N/A';
+                set('.prod-especie', especie, true, 'N/A');
+                set('.prod-paquetes', '', false, 'Cant. pallets');
+                const pq = mainRow.querySelector('.prod-paquetes'); if (pq) { pq.min = '1'; pq.title = 'Cantidad de pallets'; }
+                set('.prod-piezas', 1, true, '-');
+                set('.prod-unidad-dimensiones', 'MM', true, '');
+                set('.prod-espesor', 0, true, '-');
+                set('.prod-ancho', 0, true, '-');
+                set('.prod-largo', 0, true, '-');
+                set('.prod-resultado', 'P2', true, '');
+                const obs = mainRow.querySelector('.prod-observaciones'); if (obs) { obs.disabled = false; obs.placeholder = 'Obs... (pallets)'; }
+                const sep = mainRow.querySelector('.prod-separadores'); if (sep) { sep.value = 'NO'; sep.disabled = true; }
+                const tac = mainRow.querySelector('.prod-tacos'); if (tac) { tac.value = 'NO'; tac.disabled = true; }
+                const subSep = mainRow.nextElementSibling;
+                if (subSep && subSep.classList.contains('fila-sub-separadores')) { subSep.classList.add('hidden'); subSep.querySelectorAll('input,select').forEach(e=>{ e.value=''; e.disabled=true; }); }
+                let subTac = mainRow.nextElementSibling;
+                while (subTac && !subTac.classList.contains('fila-sub-tacos')) subTac = subTac.nextElementSibling;
+                if (subTac && subTac.classList.contains('fila-sub-tacos')) { subTac.classList.add('hidden'); subTac.querySelectorAll('input,select').forEach(e=>{ e.value=''; e.disabled=true; }); }
+                mainRow.dataset.esPallet = '1';
+            } else {
+                ['.prod-especie','.prod-paquetes','.prod-piezas','.prod-unidad-dimensiones','.prod-espesor','.prod-ancho','.prod-largo','.prod-resultado','.prod-separadores','.prod-tacos'].forEach(sel => {
+                    const el = mainRow.querySelector(sel); if (el) { el.disabled = false; el.style.opacity = ''; }
+                });
+                const pq = mainRow.querySelector('.prod-paquetes'); if (pq) { pq.placeholder = ''; pq.title = ''; if (pq.min !== undefined) pq.min = '1'; }
+                const obs = mainRow.querySelector('.prod-observaciones'); if (obs) { obs.placeholder = 'Obs...'; }
+                const subSep = mainRow.nextElementSibling;
+                if (subSep && subSep.classList.contains('fila-sub-separadores')) { subSep.querySelectorAll('input,select').forEach(e=>{ e.disabled=false; }); const sep = mainRow.querySelector('.prod-separadores'); subSep.classList.toggle('hidden', !(sep && sep.value === 'SI')); }
+                let subTac = mainRow.nextElementSibling;
+                while (subTac && !subTac.classList.contains('fila-sub-tacos')) subTac = subTac.nextElementSibling;
+                if (subTac && subTac.classList.contains('fila-sub-tacos')) { subTac.querySelectorAll('input,select').forEach(e=>{ e.disabled=false; }); const tac = mainRow.querySelector('.prod-tacos'); subTac.classList.toggle('hidden', !(tac && tac.value === 'SI')); }
+                delete mainRow.dataset.esPallet;
+            }
+        }
+
+        function prodOnProductoChange(selectEl) {
+            try {
+                const mainRow = selectEl ? selectEl.closest('tr.fila-principal') : null;
+                if (!mainRow) return;
+                const producto = getProductoProduccionPorIndice(selectEl.value);
+                const esPallet = esProductoPallet(producto);
+                prodConfigurarFilaComoPallet(mainRow, esPallet, producto);
+                const turno = mainRow.dataset.turno;
+                if (turno && typeof recalcularPlanilla === 'function') recalcularPlanilla(turno);
+            } catch (e) { console.error('prodOnProductoChange', e); }
+        }
+
                 function filaSeparador(turno, index) {
 
     return `<tr data-turno="${turno}" class="bg-amber-50 border-b italic text-amber-900" data-es-separador="true" data-parent-index="${index}">
@@ -5167,7 +5238,7 @@
 
                 <td class="p-1 text-center" style="color:var(--ap-muted)">${index + 1}</td>
 
-                <td><select class="prod-producto w-28 p-1 rounded text-xs" style="background:var(--ap-elevated);color:var(--ap-ink);border:1px solid var(--ap-border)">${opcionesProductos()}</select></td>
+                <td><select class="prod-producto w-28 p-1 rounded text-xs" style="background:var(--ap-elevated);color:var(--ap-ink);border:1px solid var(--ap-border)" onchange="if(typeof prodOnProductoChange==='function') prodOnProductoChange(this)">${opcionesProductos()}</select></td>
 
                 <td><input class="prod-especie w-24 p-1 rounded text-xs" style="background:var(--ap-elevated);color:var(--ap-ink);border:1px solid var(--ap-border)" placeholder="Eucalipto"></td>
 
@@ -5563,6 +5634,21 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
 
 
 
+                    const _prodSel = mainRow.querySelector('.prod-producto');
+                    const _prodObj = (typeof getProductoProduccionPorIndice === 'function') ? getProductoProduccionPorIndice(_prodSel ? _prodSel.value : null) : null;
+                    const _esPalletRow = (typeof esProductoPallet === 'function') ? esProductoPallet(_prodObj) : (mainRow.dataset.esPallet === '1');
+
+                    let rowTotal = 0;
+                    let rowPaquetes = 0;
+                    let rowPiezas = 0;
+
+                    if (_esPalletRow) {
+                        const cantPallets = Number(mainRow.querySelector('.prod-paquetes')?.value) || 0;
+                        rowTotal = 0;
+                        rowPaquetes = cantPallets > 0 ? cantPallets : 0;
+                        rowPiezas = 0;
+                    } else {
+
                     // Base calculation for the main product
 
                     const baseTotal = WoodMathEngine.calcularPorResultado({
@@ -5585,11 +5671,11 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
 
 
 
-                    let rowTotal = baseTotal;
+                    rowTotal = baseTotal;
 
-                    let rowPaquetes = values[0];
+                    rowPaquetes = values[0];
 
-                    let rowPiezas = values[0] * values[1];
+                    rowPiezas = values[0] * values[1];
 
 
 
@@ -5723,13 +5809,18 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
 
 
 
-                    mainRow.querySelector('.prod-p2').textContent = `${rowTotal.toFixed(2).replace('.', ',')} ${resultado}`;
+                    }
+
+                    if (_esPalletRow) {
+                        mainRow.querySelector('.prod-p2').textContent = '—';
+                    } else {
+                        mainRow.querySelector('.prod-p2').textContent = `${rowTotal.toFixed(2).replace('.', ',')} ${resultado}`;
+                        if (totalesP2M2M3[resultado] !== undefined) totalesP2M2M3[resultado] += rowTotal;
+                    }
 
                     totalPaquetes += rowPaquetes;
 
                     totalPiezas += rowPiezas;
-
-                    totalesP2M2M3[resultado] += rowTotal;
 
                 });
 
@@ -5761,18 +5852,39 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
             if (!confirm("¿Estás seguro de que deseas guardar la producción? Esto afectará el stock.")) return;
 
             const entradas = [];
+            const produccionesPallet = [];
+            const aserraderoSel = (document.getElementById('prod-aserradero')?.value || '').trim();
+            const fechaSel = document.getElementById('prod-fecha')?.value || '';
 
             document.querySelectorAll('.grupo-fila[data-turno]').forEach(tbody => {
 
                 tbody.querySelectorAll('.fila-principal').forEach(mainRow => {
 
+                const prodSel = mainRow.querySelector('.prod-producto');
+                const producto = (typeof getProductoProduccionPorIndice === 'function')
+                    ? getProductoProduccionPorIndice(prodSel ? prodSel.value : null)
+                    : (productosProduccion[Number(prodSel?.value)] || productosProduccion[0]);
+                const esPallet = (typeof esProductoPallet === 'function') ? esProductoPallet(producto) : false;
 
+                if (esPallet) {
+                    const cantidad = Number(mainRow.querySelector('.prod-paquetes')?.value) || 0;
+                    if (!(cantidad > 0)) return;
+                    produccionesPallet.push({
+                        palletId: producto?.palletId,
+                        nombre: producto?.nombre || 'Pallet',
+                        cantidad: Math.trunc(cantidad),
+                        aserradero: aserraderoSel,
+                        turno: mainRow.dataset.turno,
+                        fecha: fechaSel
+                    });
+                    return;
+                }
 
                 const getVal = (cls) => Number(mainRow.querySelector(`.prod-${cls}`)?.value) || 0;
 
                 const values = ['paquetes', 'piezas', 'espesor', 'ancho', 'largo'].map(getVal);
 
-                const especie = mainRow.querySelector('.prod-especie')?.value.trim();
+                const especie = (mainRow.querySelector('.prod-especie')?.value || '').trim();
 
                 
 
@@ -5780,29 +5892,27 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
 
 
 
-                const producto = productosProduccion[Number(mainRow.querySelector('.prod-producto').value)] || productosProduccion[0];
-
                 const unidadResultado = mainRow.querySelector('.prod-resultado').value;
 
                 const unidadDimensiones = mainRow.querySelector('.prod-unidad-dimensiones').value;
 
-                const observaciones = mainRow.querySelector('.prod-observaciones').value.trim();
+                const observaciones = (mainRow.querySelector('.prod-observaciones')?.value || '').trim();
 
 
 
                 const entrada = {
 
-                    fecha: document.getElementById('prod-fecha').value,
+                    fecha: fechaSel,
 
                     turno: mainRow.dataset.turno,
 
-                    tipoProducto: producto.nombre,
+                    tipoProducto: producto?.nombre,
 
                     especie,
 
-                    descripcionProducto: producto.nombre,
+                    descripcionProducto: producto?.nombre,
 
-                    aserradero: document.getElementById('prod-aserradero').value.trim(),
+                    aserradero: aserraderoSel,
 
                     observaciones,
 
@@ -5908,23 +6018,55 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
 
             if (localStorage.getItem('rol') !== 'admin') return alert('Solo los administradores pueden cargar producción.');
 
-            if (!entradas.length) return alert('Completá al menos una fila con especie, paquetes, cantidad y medidas.');
+            if (!entradas.length && !produccionesPallet.length) return alert('Completá al menos una fila válida. Para madera: especie, paquetes, cantidad y medidas. Para pallets (receta): solo la cantidad de pallets.');
 
-            if (entradas.some(entrada => !entrada.aserradero)) return alert('Indica el aserradero antes de guardar la producción.');
+            if ((entradas.length || produccionesPallet.length) && !aserraderoSel) return alert('Indica el aserradero antes de guardar la producción.');
 
-            const response = await fetch(`${API_URL}/produccion/entradas-masivas`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` }, body: JSON.stringify({ entradas }) });
+            const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` };
 
-            if (response.status === 401) {
+            if (entradas.length) {
+                const response = await fetch(`${API_URL}/produccion/entradas-masivas`, { method: 'POST', headers, body: JSON.stringify({ entradas }) });
 
-                cerrarSesion();
+                if (response.status === 401) {
+                    cerrarSesion();
+                    return alert('Tu sesión venció. Iniciá sesión nuevamente para guardar la producción.');
+                }
 
-                return alert('Tu sesión venció. Iniciá sesión nuevamente para guardar la producción.');
-
+                if (!response.ok) return alert('No se pudo guardar la planilla de producción.');
             }
 
-            if (!response.ok) return alert('No se pudo guardar la planilla.');
+            let palletsOk = 0;
+            const palletsErr = [];
+            for (const p of produccionesPallet) {
+                if (!p.palletId) { palletsErr.push(`${p.nombre}: sin receta (ID)`); continue; }
+                try {
+                    const res = await fetch(`${API_URL}/produccion/pallet-produccion`, { method: 'POST', headers, body: JSON.stringify({ palletId: p.palletId, cantidad: p.cantidad, aserradero: p.aserradero }) });
+                    if (res.status === 401) {
+                        cerrarSesion();
+                        return alert('Tu sesión venció. Iniciá sesión nuevamente para guardar la producción.');
+                    }
+                    if (!res.ok) {
+                        let msg = 'error';
+                        try { const j = await res.json(); msg = j?.message || j?.error || msg; } catch (e) {}
+                        palletsErr.push(`${p.nombre}: ${Array.isArray(msg) ? msg.join(', ') : msg}`);
+                    } else {
+                        palletsOk++;
+                    }
+                } catch (e) {
+                    palletsErr.push(`${p.nombre}: ${e?.message || 'error de conexión'}`);
+                }
+            }
 
-            alert(`${entradas.length} filas guardadas y sumadas al stock.`);
+            if (palletsErr.length && !entradas.length && palletsOk === 0) {
+                return alert('No se pudo registrar la producción de pallets:\n- ' + palletsErr.join('\n- '));
+            }
+
+            const partes = [];
+            if (entradas.length) partes.push(`${entradas.length} fila(s) de producción guardadas`);
+            if (palletsOk) partes.push(`${palletsOk} registro(s) de pallets guardados (${produccionesPallet.reduce((a,b)=>a+b.cantidad,0)} pallets)`);
+            let msgFinal = partes.length ? partes.join('. ') + '.' : 'Producción guardada.';
+            if (palletsErr.length) msgFinal += '\n\nCon errores:\n- ' + palletsErr.join('\n- ');
+            alert(msgFinal);
 
             renderPlanillaProduccion('MAÑANA'); renderPlanillaProduccion('TARDE');
 
