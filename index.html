@@ -5611,6 +5611,7 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
             let totalPaquetes = 0;
 
             let totalPiezas = 0;
+            let totalPallets = 0;
 
             const totalesP2M2M3 = { P2: 0, M2: 0, M3: 0 };
 
@@ -5645,8 +5646,9 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
                     if (_esPalletRow) {
                         const cantPallets = Number(mainRow.querySelector('.prod-paquetes')?.value) || 0;
                         rowTotal = 0;
-                        rowPaquetes = cantPallets > 0 ? cantPallets : 0;
+                        rowPaquetes = 0;
                         rowPiezas = 0;
+                        totalPallets += (cantPallets > 0 ? cantPallets : 0);
                     } else {
 
                     // Base calculation for the main product
@@ -5836,7 +5838,8 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
 
                 panel.querySelector('.turno-piezas').textContent = totalPiezas;
 
-                panel.querySelector('.turno-p2').textContent = `P2: ${totalesP2M2M3.P2.toFixed(2)} | M2: ${totalesP2M2M3.M2.toFixed(2)} | M3: ${totalesP2M2M3.M3.toFixed(2)}`;
+                const p2Text = `P2: ${totalesP2M2M3.P2.toFixed(2)} | M2: ${totalesP2M2M3.M2.toFixed(2)} | M3: ${totalesP2M2M3.M3.toFixed(2)}`;
+                panel.querySelector('.turno-p2').textContent = totalPallets > 0 ? `${p2Text} | Pallets: ${totalPallets}` : p2Text;
 
             }
             try{ var _p=typeof prodActualizarP2Combinado==='function'?prodActualizarP2Combinado:(window&&window.prodActualizarP2Combinado); if(_p) _p(); }catch(e){}
