@@ -366,8 +366,8 @@
         <aside id="ap-sidebar" class="ap-sidebar" aria-label="Navegación principal">
             <div class="ap-sidebar-brand"><span class="ap-brand-mark" aria-hidden="true"></span>Aserradero</div>
             <nav class="ap-nav" aria-label="Módulos">
-                <button id="tab-dashboard" onclick="cambiarVista('dashboard')" class="ap-nav-item" type="button">Dashboard</button>
-                <button id="tab-turnos" onclick="cambiarVista('turnos')" class="ap-nav-item ap-nav-active" aria-current="page" type="button">Planilla</button>
+                <button id="tab-dashboard" onclick="cambiarVista('dashboard')" class="ap-nav-item ap-nav-active" aria-current="page" type="button">Dashboard</button>
+                <button id="tab-turnos" onclick="cambiarVista('turnos')" class="ap-nav-item" type="button">Planilla</button>
                 <button id="tab-personal" onclick="cambiarVista('personal')" class="ap-nav-item" type="button">RRHH</button>
                 <button id="tab-clientes" onclick="cambiarVista('clientes')" class="ap-nav-item" type="button">Clientes</button>
                 <button id="tab-produccion" onclick="cambiarVista('produccion')" class="ap-nav-item" type="button">Producción</button>
@@ -2931,6 +2931,15 @@
 
 
 
+        const VISTAS_VALIDAS = ['dashboard','turnos','personal','clientes','produccion','stock','recetas','pedidos','rollos-fletes','gastos','reportes','suscripcion'];
+        function obtenerVistaInicial() {
+            try {
+                const v = localStorage.getItem('ultimaVista');
+                if (v && VISTAS_VALIDAS.indexOf(v) !== -1) return v;
+            } catch (e) {}
+            return 'dashboard';
+        }
+
         function cambiarVista(vista) {
 
             if (vista !== 'suscripcion' && typeof window.__licensingIsBlocked === 'function' && window.__licensingIsBlocked()) {
@@ -2938,7 +2947,9 @@
                 if (typeof licRefreshActivationStatus === 'function') licRefreshActivationStatus();
                 return;
             }
+            if (!vista || VISTAS_VALIDAS.indexOf(vista) === -1) vista = 'dashboard';
             vistaActual = vista;
+            try { localStorage.setItem('ultimaVista', vista); } catch (e) {}
 
             const dash = document.getElementById('vista-dashboard');
             if (dash) dash.classList.toggle('hidden', vista !== 'dashboard');
@@ -9706,7 +9717,7 @@ function renderPlanillaProduccion(turno, cantidad = 10) {
 
                 configurarFechasPorDefecto();
 
-                cambiarVista('dashboard');
+                cambiarVista(obtenerVistaInicial());
 
                 actualizarBadgePagos();
 
